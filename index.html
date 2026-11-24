@@ -144,7 +144,7 @@ ul{padding:0;list-style:none}
 html[data-theme="light"] .score-card.best strong{color:#b97a00}
 .score-card.pulse{animation:cardPulse .7s cubic-bezier(.2,.9,.3,1.2)}
 .score-card .gain{
-  position:absolute;inset-inline-end:50%;top:-4px;transform:translateX(50%);
+  position:absolute;left:50%;top:-4px;transform:translateX(-50%);
   font-size:14px;font-weight:800;color:var(--good);pointer-events:none;
   animation:gainFloat .9s ease-out forwards;text-shadow:0 2px 10px rgba(0,0,0,.3);
 }
@@ -222,8 +222,7 @@ html[data-theme="light"] .score-card.best strong{color:#b97a00}
 }
 .tiles{position:absolute;inset:0;pointer-events:none}
 .tile{
-  position:absolute;top:0;left:0;width:var(--tile);height:var(--tile);
-  inset-inline-start:0;
+  position:absolute;top:0;left:0;right:auto;width:var(--tile);height:var(--tile);
   display:grid;place-items:center;z-index:2;
   font-weight:800;letter-spacing:-.02em;font-size:calc(var(--tile) * .42);
   transform:translate(0,0);
@@ -294,7 +293,7 @@ html[data-theme="light"] .tile[data-value="4"] .inner{box-shadow:0 4px 10px rgba
 @keyframes tileSpawn{from{transform:scale(.2);opacity:0}60%{opacity:1}to{transform:scale(1);opacity:1}}
 @keyframes tileMerge{from{transform:scale(.4);opacity:.2}to{transform:scale(1);opacity:1}}
 @keyframes cardPulse{0%,100%{transform:scale(1)}35%{transform:scale(1.07);box-shadow:0 0 0 4px rgba(255,201,77,.16)}}
-@keyframes gainFloat{from{opacity:0;transform:translate(50%,6px) scale(.9)}25%{opacity:1}to{opacity:0;transform:translate(50%,-34px) scale(1)}}
+@keyframes gainFloat{from{opacity:0;transform:translate(-50%,6px) scale(.9)}25%{opacity:1}to{opacity:0;transform:translate(-50%,-34px) scale(1)}}
 
 /* ---------------- Board overlay ---------------- */
 .overlay{
