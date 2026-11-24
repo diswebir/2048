@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<meta name="theme-color" content="#0b1020"/>
+<meta name="description" content="بازی کلاسیک ۲۰۴۸ با ذخیره خودکار رکوردها و آمار در مرورگر"/>
+<title>بازی ۲۰۴۸</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css">
+<style>
+  :root{
+    --gap: clamp(8px, 2.4vw, 14px);
+    --board-size: min(92vw, 480px);
+    --card: rgba(255,255,255,.06);
+    --border: rgba(255,255,255,.10);
+    --text: #f1f5f9;
+    --muted: #94a3b8;
+    --accent: #f59e0b;
+    --accent2: #f97316;
+    --green: #4ade80;
+  }
+  *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
+  html{ scroll-behavior:smooth; }
+  body{
+    font-family:'Vazirmatn','Segoe UI',Tahoma,sans-serif;
+    background: linear-gradient(160deg,#0b1020 0%,#141d38 55%,#1a2340 100%);
+    color:var(--text);
+    min-height:100vh;
+    min-height:100dvh;
+    display:flex; justify-content:center;
+    padding:28px 16px 56px;
+    overflow-x:hidden;
+  }
+  .bg-decor{ position:fixed; inset:0; pointer-events:none; z-index:0; overflow:hidden; }
+  .bg-decor::before,.bg-decor::after{
+    content:""; position:absolute; border-radius:50%; filter:blur(90px); opacity:.35;
+  }
+  .bg-decor::before{ width:420px; height:420px; background:#f59e0b; top:-160px; inset-inline-start:-120px; }
+  .bg-decor::after{ width:380px; height:380px; background:#3b82f6; bottom:-140px; inset-inline-end:-100px; }
+
+  .container{ position:relative; z-index:1; width:100%; max-width:520px; display:flex; flex-direction:column; align-items:center; }
+
+  /* ---------- Header ---------- */
+  .header{ width:100%; display:flex; justify-content:space-between; align-items:flex-start; gap:14px; flex-wrap:wrap; }
+  .logo{
+    font-size:clamp(3rem,11vw,4.4rem); font-weight:900; line-height:1;
+    background:linear-gradient(135deg,#fbbf24,#f97316);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    text-shadow:none;
+  }
+  .tagline{ color:var(--muted); font-size:.92rem; margin-top:8px; max-width:280px; line-height:1.8; }
+  .scores{ display:flex; gap:10px; }
+  .score-box{
+    position:relative; background:var(--card); border:1px solid var(--border);
+    border-radius:14px; padding:10px 18px; text-align:center; min-width:108px;
+    backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+  }
+  .score-label{ display:block; font-size:.72rem; color:var(--muted); letter-spacing:.02em; }
+  .score-value{ display:block; font-size:1.55rem; font-weight:800; line-height:1.35; }
+  .score-add{
+    position:absolute; top:-4px; left:50%; transform:translateX(-50%);
+    color:var(--green); font-weight:800; font-size:1.05rem; pointer-events:none;
+    animation:floatUp .95s ease-out forwards; white-space:nowrap;
+  }
+  @keyframes floatUp{
+    from{ opacity:1; transform:translate(-50%,0); }
+    to{ opacity:0; transform:translate(-50%,-36px); }
+  }
+
+  /* ---------- Toolbar ---------- */
+  .toolbar{ width:100%; display:flex; justify-content:space-between; align-items:center; gap:12px; margin:18px 0 14px; flex-wrap:wrap; }
+  .hint{ color:var(--muted); font-size:.82rem; line-height:1.8; flex:1; min-width:200px; }
+  .actions{ display:flex; gap:8px; flex-wrap:wrap; }
+  .btn{
+    font-family:inherit; border:1px solid var(--border); background:var(--card);
+    color:var(--text); padding:9px 16px; border-radius:999px;
+    font-size:.88rem; font-weight:700; cursor:pointer; transition:transform .15s,background .15s,opacity .15s;
+    user-select:none; -webkit-user-select:none;
+  }
+  .btn:hover:not(:disabled){ transform:translateY(-1px); background:rgba(255,255,255,.13); }
+  .btn:active:not(:disabled){ transform:translateY(0) scale(.97); }
+  .btn:disabled{ opacity:.35; cursor:not-allowed; }
+  .btn-primary{ background:linear-gradient(135deg,var(--accent),var(--accent2)); border:none; color:#241300; }
+  .btn-primary:hover:not(:disabled){ background:linear-gradient(135deg,#fbbf24,#fb923c); }
+
+  /* ---------- Board ---------- */
+  .board-wrap{ position:relative; }
+  .board{
+    position:relative; width:var(--board-size); aspect-ratio:1/1;
+    background:rgba(10,15,30,.75); border:1px solid var(--border);
+    border-radius:20px; padding:var(--gap);
+    box-shadow:0 24px 60px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.06);
+    touch-action:none; user-select:none; -webkit-user-select:none;
+    animation:boardIn .45s cubic-bezier(.2,.9,.3,1.2);
+  }
+  @keyframes boardIn{ from{ opacity:0; transform:scale(.94) translateY(10px);} to{ opacity:1; transform:none;} }
+  .grid-bg{
+    position:absolute; inset:var(--gap);
+    display:grid; grid-template-columns:repeat(4,1fr); grid-template-rows:repeat(4,1fr);
+    gap:var(--gap);
+  }
+  .grid-bg div{ background:rgba(255,255,255,.055); border-radius:10px; }
+  .tiles{ position:absolute; inset:0; }
+  .tile{
+    position:absolute; top:var(--gap); left:var(--gap);
+    width:calc((100% - 5 * var(--gap)) / 4);
+    height:calc((100% - 5 * var(--gap)) / 4);
+    transform:translate(calc(var(--x) * (100% + var(--gap))), calc(var(--y) * (100% + var(--gap))));
+    transition:transform .13s ease-in-out;
+    will-change:transform;
+  }
+  .tile-inner{
+    width:100%; height:100%;
+    display:flex; align-items:center; justify-content:center;
+    border-radius:10px; font-weight:800;
+    box-shadow:0 4px 12px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.25);
+  }
+  .tile-inner.new{ animation:appear .18s ease; }
+  .tile-inner.merged{ animation:pop .22s ease; }
+  @keyframes appear{ from{ transform:scale(0);} to{ transform:scale(1);} }
+  @keyframes pop{ 0%{ transform:scale(0);} 55%{ transform:scale(1.2);} 100%{ transform:scale(1);} }
+
+  .tile-2{ background:#eee4da; color:#776e65; }
+  .tile-4{ background:#ede0c8; color:#776e65; }
+  .tile-8{ background:#f2b179; color:#fff; }
+  .tile-16{ background:#f59563; color:#fff; }
+  .tile-32{ background:#f67c5f; color:#fff; }
+  .tile-64{ background:#f65e3b; color:#fff; }
+  .tile-128{ background:#edcf72; color:#fff; }
+  .tile-256{ background:#edcc61; color:#fff; }
+  .tile-512{ background:#edc850; color:#fff; }
+  .tile-1024{ background:#edc53f; color:#fff; }
+  .tile-2048{ background:#edc22e; color:#fff; box-shadow:0 0 26px rgba(237,194,46,.6), inset 0 1px 0 rgba(255,255,255,.4); }
+  .tile-super{ background:#3c3a32; color:#fff; }
+
+  /* ---------- Overlay ---------- */
+  .overlay{
+    position:absolute; inset:0; border-radius:20px; z-index:10;
+    background:rgba(7,11,22,.74); backdrop-filter:blur(5px); -webkit-backdrop-filter:blur(5px);
+    display:flex; align-items:center; justify-content:center;
+    opacity:0; pointer-events:none; transition:opacity .3s;
+  }
+  .overlay.show{ opacity:1; pointer-events:auto; }
+  .overlay-card{ text-align:center; padding:24px 20px; max-width:88%; animation:cardIn .35s cubic-bezier(.2,.9,.3,1.3); }
+  @keyframes cardIn{ from{ opacity:0; transform:scale(.85) translateY(14px);} to{ opacity:1; transform:none;} }
+  .overlay-icon{ font-size:3.4rem; line-height:1; }
+  .overlay-card h2{ font-size:1.75rem; margin:10px 0 6px; }
+  .overlay-card p{ color:var(--muted); font-size:.9rem; line-height:1.9; }
+  .overlay-stats{ display:flex; gap:22px; justify-content:center; margin:18px 0 4px; }
+  .overlay-stats div{ display:flex; flex-direction:column; }
+  .overlay-stats b{ font-size:1.35rem; }
+  .overlay-stats span{ font-size:.7rem; color:var(--muted); }
+  .overlay-actions{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top:18px; }
+
+  /* ---------- D-pad (mobile) ---------- */
+  .dpad{ display:none; margin-top:20px; grid-template-columns:repeat(3,58px); grid-template-rows:repeat(2,58px); gap:8px; }
+  .dpad button{
+    font-family:inherit; font-size:1.3rem; color:var(--text);
+    background:var(--card); border:1px solid var(--border); border-radius:14px;
+    cursor:pointer; transition:background .15s,transform .1s; user-select:none; -webkit-user-select:none;
+  }
+  .dpad button:active{ background:rgba(255,255,255,.18); transform:scale(.94); }
+  .dpad .up{ grid-column:2; grid-row:1; }
+  .dpad .left{ grid-column:1; grid-row:2; }
+  .dpad .down{ grid-column:2; grid-row:2; }
+  .dpad .right{ grid-column:3; grid-row:2; }
+  @media (max-width:640px){ .dpad{ display:grid; } }
+
+  /* ---------- Stats ---------- */
+  .stats{ width:100%; margin-top:30px; }
+  .stats h3{ font-size:1.05rem; margin-bottom:12px; display:flex; align-items:center; gap:8px; }
+  .stats h3::after{ content:""; flex:1; height:1px; background:var(--border); }
+  .stats-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+  @media (max-width:480px){ .stats-grid{ grid-template-columns:repeat(2,1fr); } }
+  .stat{
+    background:var(--card); border:1px solid var(--border); border-radius:14px;
+    padding:14px 8px; text-align:center; backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+  }
+  .stat-value{ display:block; font-size:1.45rem; font-weight:800; }
+  .stat-label{ display:block; font-size:.7rem; color:var(--muted); margin-top:2px; }
+  .link-btn{
+    font-family:inherit; background:none; border:none; color:var(--muted);
+    font-size:.78rem; cursor:pointer; margin-top:12px; text-decoration:underline; text-underline-offset:3px;
+  }
+  .link-btn:hover{ color:#f87171; }
+
+  /* ---------- How to play ---------- */
+  .howto{ width:100%; margin-top:26px; background:var(--card); border:1px solid var(--border); border-radius:14px; }
+  .howto summary{ cursor:pointer; padding:14px 18px; font-weight:700; font-size:.95rem; list-style:none; }
+  .howto summary::-webkit-details-marker{ display:none; }
+  .howto summary::after{ content:"▾"; float:left; color:var(--muted); transition:transform .2s; }
+  .howto[open] summary::after{ transform:rotate(180deg); }
+  .howto .howto-body{ padding:0 18px 16px; color:var(--muted); font-size:.86rem; line-height:2; }
+  .howto kbd{
+    background:rgba(255,255,255,.1); border:1px solid var(--border); border-bottom-width:2px;
+    border-radius:6px; padding:1px 7px; font-family:inherit; font-size:.78rem; color:var(--text);
+  }
+
+  footer{ margin-top:30px; color:var(--muted); font-size:.78rem; text-align:center; line-height:1.9; }
+
+  /* ---------- Confetti ---------- */
+  #confetti{ position:fixed; inset:0; pointer-events:none; overflow:hidden; z-index:50; }
+  .confetti-piece{ position:absolute; top:-16px; width:10px; height:15px; border-radius:2px; opacity:.95; animation-name:fall; animation-timing-function:linear; animation-fill-mode:forwards; }
+  @keyframes fall{ to{ transform:translateY(112vh) rotate(720deg); } }
+</style>
+</head>
+<body>
+<div class="bg-decor"></div>
+
+<main class="container">
+  <header class="header">
+    <div>
+      <h1 class="logo">۲۰۴۸</h1>
+      <p class="tagline">کاشی‌ها را حرکت دهید، ادغام کنید و به ۲۰۴۸ برسید!</p>
+    </div>
+    <div class="scores">
+      <div class="score-box" id="scoreBox">
+        <span class="score-label">امتیاز</span>
+        <span class="score-value" id="score">۰</span>
+      </div>
+      <div class="score-box">
+        <span class="score-label">رکورد</span>
+        <span class="score-value" id="best">۰</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <p class="hint">با کلیدهای جهت‌دار، کلیدهای WASD یا کشیدن انگشت روی صفحه حرکت کنید.</p>
+    <div class="actions">
+      <button class="btn btn-primary" id="newGameBtn">↻ بازی جدید</button>
+      <button class="btn" id="undoBtn" disabled>↩ بازگشت</button>
+      <button class="btn" id="soundBtn">🔊 صدا: روشن</button>
+    </div>
+  </div>
+
+  <div class="board-wrap">
+    <div class="board" id="board">
+      <div class="tiles" id="tiles"></div>
+      <div class="overlay" id="overlay">
+        <div class="overlay-card">
+          <div class="overlay-icon" id="overlayIcon">🏆</div>
+          <h2 id="overlayTitle"></h2>
+          <p id="overlayText"></p>
+          <div class="overlay-stats" id="overlayStats"></div>
+          <div class="overlay-actions" id="overlayActions"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="dpad" aria-label="دکمه‌های جهت">
+    <button class="up" data-dir="up" aria-label="بالا">▲</button>
+    <button class="left" data-dir="left" aria-label="چپ">◀</button>
+    <button class="down" data-dir="down" aria-label="پایین">▼</button>
+    <button class="right" data-dir="right" aria-label="راست">▶</button>
+  </div>
+
+  <section class="stats">
+    <h3>📊 آمار بازی</h3>
+    <div class="stats-grid">
+      <div class="stat"><span class="stat-value" id="stGames">۰</span><span class="stat-label">بازی انجام‌شده</span></div>
+      <div class="stat"><span class="stat-value" id="stWins">۰</span><span class="stat-label">برد</span></div>
+      <div class="stat"><span class="stat-value" id="stMaxTile">۰</span><span class="stat-label">بیشترین کاشی</span></div>
+      <div class="stat"><span class="stat-value" id="stMoves">۰</span><span class="stat-label">مجموع حرکت‌ها</span></div>
+    </div>
+    <button class="link-btn" id="resetStatsBtn">حذف رکوردها و آمار</button>
+  </section>
+
+  <details class="howto">
+    <summary>❓ چطور بازی کنم؟</summary>
+    <div class="howto-body">
+      با کلیدهای <kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd> یا کلیدهای <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> (یا کشیدن انگشت در موبایل) همه کاشی‌ها را به یک سمت حرکت دهید. وقتی دو کاشی با عدد یکسان به هم برخورد کنند، ادغام شده و عددشان دو برابر می‌شود. هدف رسیدن به کاشی <b>۲۰۴۸</b> است — ولی بعد از آن هم می‌توانید ادامه دهید و رکورد بزرگ‌تری بسازید!<br/>
+      💾 بازی به‌صورت خودکار ذخیره می‌شود؛ اگر صفحه را ببندید و برگردید، دقیقاً از همان‌جا ادامه می‌دهید. رکورد، آمار و تنظیمات صدا هم در مرورگر شما نگه داشته می‌شوند.
+    </div>
+  </details>
+
+  <footer>ساخته‌شده با ❤️ — رکوردهای شما به‌صورت خودکار در مرورگرتان ذخیره می‌شوند.</footer>
+</main>
+
+<div id="confetti"></div>
+
+<script>
+(function(){
+'use strict';
+
+var SIZE = 4;
+var SAVE_KEY = 'persian2048_v1';
+
+function $(id){ return document.getElementById(id); }
+var boardEl = $('board'), tilesEl = $('tiles'),
+    scoreEl = $('score'), bestEl = $('best'),
+    overlayEl = $('overlay'), overlayIcon = $('overlayIcon'),
+    overlayTitle = $('overlayTitle'), overlayText = $('overlayText'),
+    overlayStats = $('overlayStats'), overlayActions = $('overlayActions'),
+    undoBtn = $('undoBtn'), soundBtn = $('soundBtn');
+
+function fa(n){ return n.toLocaleString('fa-IR'); }
+
+/* ---------- پس‌زمینه صفحه بازی ---------- */
+var gridBg = document.createElement('div');
+gridBg.className = 'grid-bg';
+for (var i = 0; i < SIZE * SIZE; i++) gridBg.appendChild(document.createElement('div'));
+boardEl.insertBefore(gridBg, tilesEl);
+
+/* ---------- وضعیت بازی ---------- */
+var tiles = [], nextId = 1;
+var score = 0, moves = 0;
+var won = false, over = false, animating = false, overlayOpen = false;
+var undoStack = [], moveToken = 0;
+var stats = { best: 0, gamesPlayed: 0, gamesWon: 0, maxTile: 0, totalMoves: 0 };
+var settings = { sound: true };
+
+/* ---------- ذخیره‌سازی در مرورگر ---------- */
+function loadSave(){
+  try{
+    var raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return false;
+    var d = JSON.parse(raw);
+    if (!d || !Array.isArray(d.tiles) || !d.tiles.length) return false;
+    stats = Object.assign(stats, d.stats || {});
+    settings = Object.assign(settings, d.settings || {});
+    score = d.score || 0; moves = d.moves || 0;
+    won = !!d.won; over = !!d.over;
+    undoStack = Array.isArray(d.undoStack) ? d.undoStack : [];
+    tiles = [];
+    d.tiles.forEach(function(t){ createTile(t.x, t.y, t.value); });
+    return true;
+  }catch(e){ return false; }
+}
+
+function saveGame(){
+  try{
+    stats.best = Math.max(stats.best, score);
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      tiles: tiles.map(function(t){ return {x: t.x, y: t.y, value: t.value}; }),
+      score: score, moves: moves, won: won, over: over,
+      undoStack: undoStack.slice(-30),
+      stats: stats, settings: settings
+    }));
+  }catch(e){ /* حافظه در دسترس نیست */ }
+}
+
+/* ---------- کاشی‌ها ---------- */
+function createTile(x, y, value, anim){
+  var t = { id: nextId++, x: x, y: y, value: value };
+  var el = document.createElement('div');
+  el.className = 'tile';
+  el.style.setProperty('--x', x);
+  el.style.setProperty('--y', y);
+  var inner = document.createElement('div');
+  inner.className = 'tile-inner ' + (value <= 2048 ? 'tile-' + value : 'tile-super')
+                  + (anim === 'new' ? ' new' : anim === 'merged' ? ' merged' : '');
+  inner.textContent = fa(value);
+  var digits = String(value).length;
+  inner.style.fontSize = digits <= 2 ? 'clamp(1.2rem,5vw,1.7rem)'
+                       : digits === 3 ? 'clamp(1.05rem,4.4vw,1.45rem)'
+                       : digits === 4 ? 'clamp(.85rem,3.6vw,1.15rem)'
+                       : 'clamp(.7rem,3vw,.95rem)';
+  el.appendChild(inner);
+  tilesEl.appendChild(el);
+  t.el = el; t.inner = inner;
+  tiles.push(t);
+  return t;
+}
+
+function updateTileEl(t){
+  t.el.style.setProperty('--x', t.x);
+  t.el.style.setProperty('--y', t.y);
+}
+
+function removeTile(t){
+  t.el.remove();
+  tiles = tiles.filter(function(o){ return o !== t; });
+}
+
+function spawnTile(){
+  var taken = {};
+  tiles.forEach(function(t){ taken[t.x + ',' + t.y] = true; });
+  var empty = [];
+  for (var y = 0; y < SIZE; y++)
+    for (var x = 0; x < SIZE; x++)
+      if (!taken[x + ',' + y]) empty.push({x: x, y: y});
+  if (!empty.length) return;
+  var c = empty[(Math.random() * empty.length) | 0];
+  var v = Math.random() < 0.9 ? 2 : 4;
+  createTile(c.x, c.y, v, 'new');
+  if (v > stats.maxTile) stats.maxTile = v;
+}
+
+/* ---------- منطق حرکت ---------- */
+function lineCells(dir, i){
+  var cells = [];
+  for (var j = 0; j < SIZE; j++){
+    if (dir === 'left') cells.push([j, i]);
+    else if (dir === 'right') cells.push([SIZE - 1 - j, i]);
+    else if (dir === 'up') cells.push([i, j]);
+    else cells.push([i, SIZE - 1 - j]);
+  }
+  return cells;
+}
+
+function move(dir){
+  if (over || animating || overlayOpen) return;
+
+  var grid = [];
+  for (var r = 0; r < SIZE; r++) grid.push([null, null, null, null]);
+  tiles.forEach(function(t){ grid[t.y][t.x] = t; });
+
+  var actions = [], gained = 0;
+  for (var i = 0; i < SIZE; i++){
+    var cells = lineCells(dir, i);
+    var line = cells.map(function(c){ return grid[c[1]][c[0]]; }).filter(Boolean);
+    var target = 0, j = 0;
+    while (j < line.length){
+      var tx = cells[target][0], ty = cells[target][1];
+      var t = line[j];
+      if (j + 1 < line.length && line[j + 1].value === t.value){
+        actions.push({tile: t, toX: tx, toY: ty, mergeWith: line[j + 1]});
+        actions.push({tile: line[j + 1], toX: tx, toY: ty, mergeWith: t});
+        gained += t.value * 2;
+        j += 2;
+      }else{
+        actions.push({tile: t, toX: tx, toY: ty, mergeWith: null});
+        j += 1;
+      }
+      target++;
+    }
+  }
+
+  var moved = actions.some(function(a){
+    return a.mergeWith || a.tile.x !== a.toX || a.tile.y !== a.toY;
+  });
+  if (!moved){ checkEnd(); return; }
+
+  pushUndo();
+  moves++; stats.totalMoves++;
+  animating = true;
+  var token = ++moveToken;
+
+  actions.forEach(function(a){
+    a.tile.x = a.toX; a.tile.y = a.toY;
+    updateTileEl(a.tile);
+    if (a.mergeWith) a.tile.el.style.zIndex = 2;
+  });
+  tone(150, .05, 'triangle', .05);
+
+  setTimeout(function(){
+    if (token !== moveToken) return; /* بازی جدید یا بازگشت انجام شده */
+    var seen = {};
+    actions.filter(function(a){ return a.mergeWith; }).forEach(function(a){
+      if (seen[a.tile.id]) return;
+      seen[a.tile.id] = true; seen[a.mergeWith.id] = true;
+      var val = a.tile.value * 2;
+      removeTile(a.tile); removeTile(a.mergeWith);
+      createTile(a.toX, a.toY, val, 'merged');
+      if (val > stats.maxTile) stats.maxTile = val;
+    });
+    if (gained > 0){
+      score += gained;
+      showScorePopup(gained);
+      playMergeSound();
+    }
+    spawnTile();
+    animating = false;
+    updateScoreUI(); updateStatsUI();
+    checkEnd();
+  }, 140);
+}
+
+function isGameOver(){
+  if (tiles.length < SIZE * SIZE) return false;
+  var grid = [];
+  for (var r = 0; r < SIZE; r++) grid.push([null, null, null, null]);
+  tiles.forEach(function(t){ grid[t.y][t.x] = t; });
+  for (var y = 0; y < SIZE; y++){
+    for (var x = 0; x < SIZE; x++){
+      var v = grid[y][x].value;
+      if (x + 1 < SIZE && grid[y][x + 1].value === v) return false;
+      if (y + 1 < SIZE && grid[y + 1][x].value === v) return false;
+    }
+  }
+  return true;
+}
+
+function checkEnd(){
+  if (!won && tiles.some(function(t){ return t.value >= 2048; })){
+    won = true;
+    stats.gamesWon++;
+    updateStatsUI();
+    showOverlay('win');
+    playWinSound();
+    launchConfetti();
+    saveGame();
+    return;
+  }
+  if (isGameOver()){
+    over = true;
+    showOverlay('over');
+    playLoseSound();
+  }
+  saveGame();
+}
+
+/* ---------- بازگشت (Undo) ---------- */
+function pushUndo(){
+  undoStack.push({
+    tiles: tiles.map(function(t){ return {x: t.x, y: t.y, value: t.value}; }),
+    score: score, moves: moves, won: won
+  });
+  if (undoStack.length > 100) undoStack.shift();
+  updateUndoBtn();
+}
+
+function undo(){
+  if (animating || !undoStack.length) return;
+  moveToken++;
+  var s = undoStack.pop();
+  tiles.forEach(function(t){ t.el.remove(); });
+  tiles = [];
+  s.tiles.forEach(function(st){ createTile(st.x, st.y, st.value); });
+  score = s.score; moves = s.moves; won = s.won;
+  over = false;
+  hideOverlay();
+  updateScoreUI(); updateStatsUI(); updateUndoBtn();
+  saveGame();
+}
+
+/* ---------- بازی جدید ---------- */
+function newGame(){
+  moveToken++;
+  animating = false;
+  tiles.forEach(function(t){ t.el.remove(); });
+  tiles = [];
+  score = 0; moves = 0; won = false; over = false;
+  undoStack = [];
+  stats.gamesPlayed++;
+  spawnTile(); spawnTile();
+  hideOverlay();
+  updateScoreUI(); updateStatsUI(); updateUndoBtn();
+  saveGame();
+}
+
+/* ---------- رابط کاربری ---------- */
+function updateScoreUI(){
+  scoreEl.textContent = fa(score);
+  bestEl.textContent = fa(Math.max(stats.best, score));
+}
+function updateStatsUI(){
+  $('stGames').textContent = fa(stats.gamesPlayed);
+  $('stWins').textContent = fa(stats.gamesWon);
+  $('stMaxTile').textContent = fa(stats.maxTile);
+  $('stMoves').textContent = fa(stats.totalMoves);
+}
+function updateUndoBtn(){ undoBtn.disabled = !undoStack.length; }
+function updateSoundBtn(){
+  soundBtn.textContent = settings.sound ? '🔊 صدا: روشن' : '🔇 صدا: خاموش';
+}
+function showScorePopup(n){
+  var el = document.createElement('span');
+  el.className = 'score-add';
+  el.textContent = '+' + fa(n);
+  $('scoreBox').appendChild(el);
+  setTimeout(function(){ el.remove(); }, 950);
+}
+
+/* ---------- پنجره پایانی / برد ---------- */
+function showOverlay(kind){
+  overlayActions.innerHTML = '';
+  overlayStats.innerHTML =
+    '<div><b>' + fa(score) + '</b><span>امتیاز</span></div>' +
+    '<div><b>' + fa(stats.best) + '</b><span>رکورد</span></div>' +
+    '<div><b>' + fa(stats.maxTile) + '</b><span>بیشترین کاشی</span></div>';
+  if (kind === 'win'){
+    overlayIcon.textContent = '🏆';
+    overlayTitle.textContent = 'آفرین! به ۲۰۴۸ رسیدی!';
+    overlayText.textContent = 'تو یک برنده واقعی هستی. می‌توانی بازی را ادامه بدهی و رکورد بزرگ‌تری بسازی.';
+    addOverlayBtn('ادامه بازی', 'btn-primary', function(){ hideOverlay(); checkEnd(); });
+    addOverlayBtn('بازی جدید', '', function(){ newGame(); });
+  }else{
+    overlayIcon.textContent = '😢';
+    overlayTitle.textContent = 'بازی تمام شد!';
+    overlayText.textContent = 'حرکت دیگری ممکن نیست. اما می‌توانی یک حرکت به عقب برگردی و دوباره تلاش کنی!';
+    addOverlayBtn('بازی جدید', 'btn-primary', function(){ newGame(); });
+    if (undoStack.length) addOverlayBtn('بازگشت یک حرکت', '', function(){ undo(); });
+  }
+  overlayEl.classList.add('show');
+  overlayOpen = true;
+}
+function addOverlayBtn(label, cls, fn){
+  var b = document.createElement('button');
+  b.className = 'btn ' + cls;
+  b.textContent = label;
+  b.addEventListener('click', fn);
+  overlayActions.appendChild(b);
+}
+function hideOverlay(){
+  overlayEl.classList.remove('show');
+  overlayOpen = false;
+}
+
+/* ---------- صدا ---------- */
+var audioCtx = null;
+function tone(freq, dur, type, vol, delay){
+  if (!settings.sound) return;
+  try{
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    var t0 = audioCtx.currentTime + (delay || 0);
+    var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = type || 'sine';
+    o.frequency.setValueAtTime(freq, t0);
+    g.gain.setValueAtTime(vol || .1, t0);
+    g.gain.exponentialRampToValueAtTime(.0001, t0 + (dur || .08));
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(t0); o.stop(t0 + (dur || .08) + .02);
+  }catch(e){}
+}
+function playMergeSound(){ tone(440, .07, 'sine', .12); tone(660, .1, 'sine', .12, .05); }
+function playWinSound(){ [523, 659, 784, 1047].forEach(function(f, i){ tone(f, .16, 'triangle', .14, i * .09); }); }
+function playLoseSound(){ [392, 330, 262].forEach(function(f, i){ tone(f, .2, 'triangle', .1, i * .14); }); }
+
+/* ---------- کنفتی برد ---------- */
+function launchConfetti(){
+  var box = $('confetti');
+  var colors = ['#f59e0b', '#f97316', '#ef4444', '#22c55e', '#3b82f6', '#a855f7', '#ec4899'];
+  for (var i = 0; i < 90; i++){
+    var p = document.createElement('div');
+    p.className = 'confetti-piece';
+    p.style.left = (Math.random() * 100) + 'vw';
+    p.style.background = colors[(Math.random() * colors.length) | 0];
+    p.style.animationDuration = (2.2 + Math.random() * 2.2) + 's';
+    p.style.animationDelay = (Math.random() * .6) + 's';
+    box.appendChild(p);
+    (function(el){ setTimeout(function(){ el.remove(); }, 5600); })(p);
+  }
+}
+
+/* ---------- ورودی‌ها ---------- */
+var KEYMAP = {
+  ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down',
+  KeyA: 'left', KeyD: 'right', KeyW: 'up', KeyS: 'down'
+};
+var KEYMAP_LEGACY = {
+  Left: 'left', Right: 'right', Up: 'up', Down: 'down',
+  a: 'left', d: 'right', w: 'up', s: 'down',
+  A: 'left', D: 'right', W: 'up', S: 'down'
+};
+document.addEventListener('keydown', function(e){
+  var code = e.code || '';
+  var key = e.key || '';
+  if (code === 'KeyU' || key === 'u' || key === 'U'){ undo(); return; }
+  var dir = KEYMAP[code] || KEYMAP_LEGACY[key];
+  if (dir){
+    e.preventDefault();
+    move(dir);
+  }
+});
+
+var touchStart = null;
+boardEl.addEventListener('touchstart', function(e){
+  var t = e.touches[0];
+  touchStart = {x: t.clientX, y: t.clientY};
+}, {passive: true});
+boardEl.addEventListener('touchmove', function(e){ e.preventDefault(); }, {passive: false});
+boardEl.addEventListener('touchend', function(e){
+  if (!touchStart) return;
+  var t = e.changedTouches[0];
+  var dx = t.clientX - touchStart.x, dy = t.clientY - touchStart.y;
+  touchStart = null;
+  if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
+  move(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'));
+});
+
+document.querySelectorAll('.dpad button').forEach(function(b){
+  b.addEventListener('click', function(){ move(b.dataset.dir); });
+});
+
+$('newGameBtn').addEventListener('click', newGame);
+undoBtn.addEventListener('click', undo);
+soundBtn.addEventListener('click', function(){
+  settings.sound = !settings.sound;
+  updateSoundBtn();
+  saveGame();
+});
+$('resetStatsBtn').addEventListener('click', function(){
+  if (!confirm('همه رکوردها و آمار حذف شوند؟')) return;
+  stats = { best: 0, gamesPlayed: 0, gamesWon: 0, maxTile: 0, totalMoves: 0 };
+  updateScoreUI(); updateStatsUI(); saveGame();
+});
+
+/* ---------- شروع ---------- */
+var restored = loadSave();
+if (!restored){
+  newGame();
+}else{
+  updateScoreUI(); updateStatsUI(); updateUndoBtn();
+  if (over) showOverlay('over');
+}
+updateSoundBtn();
+
+})();
+</script>
+</body>
+</html>
