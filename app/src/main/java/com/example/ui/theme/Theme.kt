@@ -25,9 +25,9 @@ import com.example.model.ThemeMode
 
 val VazirmatnFontFamily = FontFamily(
     Font(R.font.vazirmatn, FontWeight.Normal),
-    Font(R.font.vazirmatn, FontWeight.SemiBold),
-    Font(R.font.vazirmatn, FontWeight.Bold),
-    Font(R.font.vazirmatn, FontWeight.ExtraBold)
+    Font(R.font.vazirmatn_semibold, FontWeight.SemiBold),
+    Font(R.font.vazirmatn_bold, FontWeight.Bold),
+    Font(R.font.vazirmatn_extrabold, FontWeight.ExtraBold)
 )
 
 @Immutable

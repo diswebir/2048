@@ -3,15 +3,19 @@ package com.example.ui.components
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.VisibilityThreshold
 import androidx.compose.animation.core.animateIntOffsetAsState
 import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -43,8 +47,11 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -68,9 +75,10 @@ import com.example.ui.theme.VazirmatnFontFamily
 import com.example.ui.theme.tileStyleFor
 import com.example.util.FaFormat
 import kotlin.math.abs
+import kotlin.math.hypot
 import kotlin.math.roundToInt
 
-private val SlideEasing = CubicBezierEasing(0.2f, 0.7f, 0.3f, 1f)
+private val SlideEasing = CubicBezierEasing(0.22f, 0.8f, 0.32f, 1f)
 private val PopEasing = CubicBezierEasing(0.2f, 0.9f, 0.3f, 1.25f)
 
 @Composable
@@ -91,28 +99,33 @@ fun GameBoard(
 ) {
     val colors = LocalAppColors.current
     val density = LocalDensity.current
+    val haptic = LocalHapticFeedback.current
     val nudgeOffsetX = remember { Animatable(0f) }
     val nudgeOffsetY = remember { Animatable(0f) }
 
     LaunchedEffect(nudgeToken) {
-        if (nudgeToken > 0L && nudgeDir != null && animEnabled) {
-            val dist = with(density) { 8.dp.toPx() }
-            when (nudgeDir) {
-                Direction.LEFT -> {
-                    nudgeOffsetX.animateTo(-dist, tween(90))
-                    nudgeOffsetX.animateTo(0f, tween(110))
-                }
-                Direction.RIGHT -> {
-                    nudgeOffsetX.animateTo(dist, tween(90))
-                    nudgeOffsetX.animateTo(0f, tween(110))
-                }
-                Direction.UP -> {
-                    nudgeOffsetY.animateTo(-dist, tween(90))
-                    nudgeOffsetY.animateTo(0f, tween(110))
-                }
-                Direction.DOWN -> {
-                    nudgeOffsetY.animateTo(dist, tween(90))
-                    nudgeOffsetY.animateTo(0f, tween(110))
+        if (nudgeToken > 0L && nudgeDir != null) {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            if (animEnabled) {
+                val dist = with(density) { 8.dp.toPx() }
+                val returnSpec = spring<Float>(dampingRatio = 0.55f, stiffness = 950f)
+                when (nudgeDir) {
+                    Direction.LEFT -> {
+                        nudgeOffsetX.animateTo(-dist, tween(65))
+                        nudgeOffsetX.animateTo(0f, returnSpec)
+                    }
+                    Direction.RIGHT -> {
+                        nudgeOffsetX.animateTo(dist, tween(65))
+                        nudgeOffsetX.animateTo(0f, returnSpec)
+                    }
+                    Direction.UP -> {
+                        nudgeOffsetY.animateTo(-dist, tween(65))
+                        nudgeOffsetY.animateTo(0f, returnSpec)
+                    }
+                    Direction.DOWN -> {
+                        nudgeOffsetY.animateTo(dist, tween(65))
+                        nudgeOffsetY.animateTo(0f, returnSpec)
+                    }
                 }
             }
         }
@@ -120,7 +133,7 @@ fun GameBoard(
 
     val boardShape = RoundedCornerShape(22.dp)
     val overlayVisible = session.over || session.showWin
-    val swipeThresholdPx = with(density) { 22.dp.toPx() }
+    val swipeThresholdPx = with(density) { 18.dp.toPx() }
 
     BoxWithConstraints(
         modifier = modifier
@@ -140,42 +153,40 @@ fun GameBoard(
             .testTag("game_board")
             .pointerInput(overlayVisible) {
                 if (overlayVisible) return@pointerInput
-                var totalDx = 0f
-                var totalDy = 0f
-                var triggered = false
-                detectDragGestures(
-                    onDragStart = {
-                        totalDx = 0f
-                        totalDy = 0f
-                        triggered = false
-                    },
-                    onDragEnd = {
-                        totalDx = 0f
-                        totalDy = 0f
-                        triggered = false
-                    },
-                    onDragCancel = {
-                        totalDx = 0f
-                        totalDy = 0f
-                        triggered = false
-                    },
-                    onDrag = { change, dragAmount ->
-                        change.consume()
-                        if (triggered) return@detectDragGestures
-                        totalDx += dragAmount.x
-                        totalDy += dragAmount.y
-                        val maxDist = maxOf(abs(totalDx), abs(totalDy))
-                        if (maxDist >= swipeThresholdPx) {
-                            triggered = true
-                            val dir = if (abs(totalDx) > abs(totalDy)) {
-                                if (totalDx > 0f) Direction.RIGHT else Direction.LEFT
-                            } else {
-                                if (totalDy > 0f) Direction.DOWN else Direction.UP
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    val startPos = down.position
+                    var triggered = false
+                    while (true) {
+                        val event = awaitPointerEvent(pass = PointerEventPass.Initial)
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: event.changes.firstOrNull()
+                        if (change == null || !change.pressed) {
+                            break
+                        }
+                        if (!triggered) {
+                            val dx = change.position.x - startPos.x
+                            val dy = change.position.y - startPos.y
+                            val dist = hypot(dx, dy)
+                            if (dist >= swipeThresholdPx) {
+                                val ax = abs(dx)
+                                val ay = abs(dy)
+                                if (ax > ay * 1.1f || ay > ax * 1.1f) {
+                                    triggered = true
+                                    change.consume()
+                                    val dir = if (ax > ay) {
+                                        if (dx > 0f) Direction.RIGHT else Direction.LEFT
+                                    } else {
+                                        if (dy > 0f) Direction.DOWN else Direction.UP
+                                    }
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onSwipe(dir)
+                                }
                             }
-                            onSwipe(dir)
+                        } else {
+                            change.consume()
                         }
                     }
-                )
+                }
             }
     ) {
         val boardSize = maxWidth
@@ -183,10 +194,8 @@ fun GameBoard(
         val tileSize = (boardSize - gap * (GameEngine.SIZE + 1)) / GameEngine.SIZE
         val cellRadius = if (boardSize < 340.dp) 10.dp else 12.dp
 
-        // Board coordinate grid is physical LTR so swipe right moves to c=3 and swipe left moves to c=0
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
             Box(modifier = Modifier.fillMaxSize()) {
-                // Background empty cell grid
                 for (r in 0 until GameEngine.SIZE) {
                     for (c in 0 until GameEngine.SIZE) {
                         val x = gap + (tileSize + gap) * c
@@ -202,7 +211,6 @@ fun GameBoard(
                     }
                 }
 
-                // Ghost tiles (sliding into merge cell and fading out)
                 if (animEnabled) {
                     for (ghost in ghosts) {
                         key(ghostToken, ghost.id) {
@@ -218,7 +226,6 @@ fun GameBoard(
                     }
                 }
 
-                // Active tiles
                 for (tile in session.tiles) {
                     key(tile.id) {
                         AnimatedTileView(
@@ -235,10 +242,9 @@ fun GameBoard(
             }
         }
 
-        // Win / Game Over Overlays rendered in RTL
         AnimatedVisibility(
             visible = overlayVisible,
-            enter = if (animEnabled) fadeIn(tween(200)) + scaleIn(initialScale = 0.96f, animationSpec = tween(220)) else fadeIn(snap()),
+            enter = if (animEnabled) fadeIn(tween(220)) + scaleIn(initialScale = 0.95f, animationSpec = spring(dampingRatio = 0.8f, stiffness = 500f)) else fadeIn(snap()),
             exit = if (animEnabled) fadeOut(tween(150)) else fadeOut(snap()),
             modifier = Modifier
                 .fillMaxSize()
@@ -291,12 +297,20 @@ private fun AnimatedTileView(
 
     val animatedOffset by animateIntOffsetAsState(
         targetValue = IntOffset(targetXPx, targetYPx),
-        animationSpec = if (animEnabled) tween(durationMillis = 130, easing = SlideEasing) else snap(),
+        animationSpec = if (animEnabled) {
+            spring(
+                dampingRatio = 0.88f,
+                stiffness = 860f,
+                visibilityThreshold = IntOffset.VisibilityThreshold
+            )
+        } else {
+            snap()
+        },
         label = "tileOffset_${tile.id}"
     )
 
-    val scaleAnim = remember { Animatable(if (animEnabled && (tile.spawned || tile.merged)) 0.35f else 1f) }
-    val alphaAnim = remember { Animatable(if (animEnabled && (tile.spawned || tile.merged)) 0.15f else 1f) }
+    val scaleAnim = remember { Animatable(if (animEnabled && (tile.spawned || tile.merged)) 0.25f else 1f) }
+    val alphaAnim = remember { Animatable(if (animEnabled && (tile.spawned || tile.merged)) 0.1f else 1f) }
 
     LaunchedEffect(tile.id, tile.merged, animEnabled) {
         if (!animEnabled) {
@@ -307,7 +321,7 @@ private fun AnimatedTileView(
         if (tile.spawned) {
             alphaAnim.animateTo(1f, tween(130))
         } else if (tile.merged) {
-            alphaAnim.animateTo(1f, tween(120))
+            alphaAnim.animateTo(1f, tween(100))
         } else {
             alphaAnim.snapTo(1f)
         }
@@ -319,10 +333,13 @@ private fun AnimatedTileView(
             return@LaunchedEffect
         }
         if (tile.spawned) {
-            scaleAnim.animateTo(1f, tween(180, delayMillis = 30, easing = PopEasing))
+            scaleAnim.animateTo(
+                1f,
+                spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = 750f)
+            )
         } else if (tile.merged) {
-            scaleAnim.animateTo(1.06f, tween(130, delayMillis = 55, easing = PopEasing))
-            scaleAnim.animateTo(1f, tween(90))
+            scaleAnim.animateTo(1.12f, tween(115, delayMillis = 45, easing = PopEasing))
+            scaleAnim.animateTo(1f, spring(dampingRatio = 0.72f, stiffness = 800f))
         } else {
             scaleAnim.snapTo(1f)
         }
@@ -366,16 +383,16 @@ private fun GhostTileView(
     val scaleAnim = remember { Animatable(1f) }
 
     LaunchedEffect(ghost.id) {
-        xAnim.animateTo(toX, tween(125, easing = SlideEasing))
+        xAnim.animateTo(toX, tween(115, easing = SlideEasing))
     }
     LaunchedEffect(ghost.id) {
-        yAnim.animateTo(toY, tween(125, easing = SlideEasing))
+        yAnim.animateTo(toY, tween(115, easing = SlideEasing))
     }
     LaunchedEffect(ghost.id) {
-        alphaAnim.animateTo(0f, tween(120, delayMillis = 45))
+        alphaAnim.animateTo(0f, tween(110, delayMillis = 45))
     }
     LaunchedEffect(ghost.id) {
-        scaleAnim.animateTo(0.84f, tween(120, delayMillis = 45))
+        scaleAnim.animateTo(0.84f, tween(110, delayMillis = 45))
     }
 
     TileFace(
@@ -418,7 +435,7 @@ private fun TileFace(
         modifier = modifier
             .size(tileSize)
             .shadow(
-                elevation = if (value >= 128) 10.dp else 4.dp,
+                elevation = if (value >= 128) 12.dp else 4.dp,
                 shape = shape,
                 ambientColor = style.glowColor,
                 spotColor = style.glowColor

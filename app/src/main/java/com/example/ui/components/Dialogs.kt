@@ -1,5 +1,7 @@
 package com.example.ui.components
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -43,6 +45,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -185,6 +188,8 @@ fun SettingsDialog(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            val context = LocalContext.current
+            val telegramUrl = stringResource(R.string.creator_url)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -196,11 +201,24 @@ fun SettingsDialog(
                     onClick = onRequestResetAll,
                     modifier = Modifier.testTag("settings_reset_button")
                 )
-                Text(
-                    text = stringResource(R.string.settings_version),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = colors.muted
-                )
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = stringResource(R.string.settings_version),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.muted
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "${stringResource(R.string.creator_credit)} • ${stringResource(R.string.creator_handle)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.brand2,
+                        modifier = Modifier.clickable {
+                            runCatching {
+                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(telegramUrl)))
+                            }
+                        }
+                    )
+                }
             }
         }
     }

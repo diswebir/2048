@@ -2,13 +2,20 @@ package com.example.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -22,6 +29,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -31,20 +39,28 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -52,6 +68,7 @@ import com.example.R
 import com.example.game.GameEngine
 import com.example.model.Direction
 import com.example.ui.components.AllRecordsDialog
+import com.example.ui.components.BrandMark
 import com.example.ui.components.ConfettiOverlay
 import com.example.ui.components.ConfirmDialog
 import com.example.ui.components.ControlsCard
@@ -67,12 +84,25 @@ import com.example.ui.components.StatusCard
 import com.example.ui.components.ToastPill
 import com.example.ui.theme.LocalAppColors
 import com.example.ui.theme.Puzzle2048Theme
+import com.example.util.FaFormat
+import kotlinx.coroutines.delay
 
 @Composable
 fun GameScreen(viewModel: GameViewModel) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    var showSplash by rememberSaveable { mutableStateOf(true) }
+
+    LaunchedEffect(state.isReady) {
+        if (state.isReady && showSplash) {
+            delay(920L)
+            showSplash = false
+        }
+    }
 
     LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) {
+        viewModel.onAppPaused()
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
         viewModel.onAppPaused()
     }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
@@ -120,7 +150,6 @@ fun GameScreen(viewModel: GameViewModel) {
                         }
                     }
             ) {
-                // Ambient radial background glows matching index.html
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     drawCircle(
                         brush = Brush.radialGradient(
@@ -188,7 +217,6 @@ fun GameScreen(viewModel: GameViewModel) {
                                     horizontalArrangement = Arrangement.spacedBy(24.dp),
                                     verticalAlignment = Alignment.Top
                                 ) {
-                                    // Main Play Column
                                     Column(
                                         modifier = Modifier.weight(1f),
                                         horizontalAlignment = Alignment.CenterHorizontally
@@ -230,7 +258,6 @@ fun GameScreen(viewModel: GameViewModel) {
                                         }
                                     }
 
-                                    // Side Cards Column
                                     Column(
                                         modifier = Modifier.width(336.dp),
                                         verticalArrangement = Arrangement.spacedBy(14.dp)
@@ -319,13 +346,11 @@ fun GameScreen(viewModel: GameViewModel) {
                     }
                 }
 
-                // Confetti celebration
                 ConfettiOverlay(
                     triggerToken = state.confettiToken,
                     animEnabled = state.settings.anim
                 )
 
-                // Bottom toast notification
                 AnimatedVisibility(
                     visible = state.toast != null,
                     enter = fadeIn() + slideInVertically { it / 2 },
@@ -341,7 +366,18 @@ fun GameScreen(viewModel: GameViewModel) {
                     }
                 }
 
-                // Modal Dialogs
+                // Soft entrance logo splash overlay
+                AnimatedVisibility(
+                    visible = showSplash,
+                    enter = fadeIn(tween(180)),
+                    exit = fadeOut(tween(380)) + scaleOut(targetScale = 1.04f, animationSpec = tween(380))
+                ) {
+                    SplashIntroOverlay(
+                        digitsMode = state.settings.digits,
+                        onSkip = { showSplash = false }
+                    )
+                }
+
                 when (state.dialog) {
                     GameDialog.None -> Unit
                     GameDialog.Settings -> SettingsDialog(
@@ -391,6 +427,92 @@ fun GameScreen(viewModel: GameViewModel) {
                         onDismiss = viewModel::dismissDialog
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SplashIntroOverlay(
+    digitsMode: com.example.model.DigitsMode,
+    onSkip: () -> Unit
+) {
+    val colors = LocalAppColors.current
+    val logoScale = remember { Animatable(0.76f) }
+    val logoAlpha = remember { Animatable(0f) }
+    val textAlpha = remember { Animatable(0f) }
+
+    LaunchedEffect(Unit) {
+        logoAlpha.animateTo(1f, tween(340))
+    }
+    LaunchedEffect(Unit) {
+        logoScale.animateTo(
+            1f,
+            spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow)
+        )
+    }
+    LaunchedEffect(Unit) {
+        delay(160L)
+        textAlpha.animateTo(1f, tween(380))
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    listOf(colors.bgBase, colors.bgMid, colors.bgBase)
+                )
+            )
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onSkip
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.size(320.dp)) {
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(colors.brand.copy(alpha = 0.28f), colors.brand2.copy(alpha = 0.12f), Color.Transparent)
+                )
+            )
+        }
+
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            BrandMark(
+                size = 96.dp,
+                modifier = Modifier.graphicsLayer {
+                    scaleX = logoScale.value
+                    scaleY = logoScale.value
+                    alpha = logoAlpha.value
+                }
+            )
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.graphicsLayer { alpha = textAlpha.value }
+            ) {
+                Text(
+                    text = FaFormat.toDigits("2048", digitsMode),
+                    style = MaterialTheme.typography.displaySmall.copy(fontSize = 34.sp),
+                    fontWeight = FontWeight.ExtraBold,
+                    color = colors.text
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = stringResource(R.string.splash_subtitle),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.muted
+                )
+                Spacer(modifier = Modifier.height(18.dp))
+                Text(
+                    text = "${stringResource(R.string.creator_credit)} • ${stringResource(R.string.creator_handle)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.brand2.copy(alpha = 0.9f)
+                )
             }
         }
     }

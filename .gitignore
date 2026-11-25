@@ -1,2 +1,24 @@
+# Gradle & Android build outputs
+.gradle/
+build/
+app/build/
+.build-outputs/
+captures/
+.cxx/
+
+# Local / IDE files
+local.properties
+*.iml
+.idea/
+.DS_Store
+
+# Signing & generated archives
+debug.keystore
+*.jks
+*.keystore
+*.zip
+dist/
+
+# Misc
 node_modules/
 .devtest/

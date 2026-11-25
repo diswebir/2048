@@ -94,6 +94,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private var lockJob: Job? = null
     private var spawnJob: Job? = null
     private var toastJob: Job? = null
+    private var ghostClearJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -138,7 +139,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     if (sec != state.elapsedSeconds) {
                         _uiState.update { it.copy(elapsedSeconds = sec) }
                     }
-                    if (sec != lastSavedSecond && sec % 10 == 0 && session.moves > 0) {
+                    if (sec != lastSavedSecond && sec % 5 == 0 && session.moves > 0) {
                         lastSavedSecond = sec
                         persistNow()
                     }
@@ -149,11 +150,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onAppPaused() {
         val state = _uiState.value
+        if (!state.isReady) return
         val session = state.game
-        if (!state.isReady || session.runSinceMillis == null) return
-        val elapsed = computeElapsed(session)
-        val paused = session.copy(timeBank = elapsed, runSinceMillis = null)
-        _uiState.update { it.copy(game = paused, elapsedSeconds = elapsed) }
+        if (session.runSinceMillis != null) {
+            val elapsed = computeElapsed(session)
+            val paused = session.copy(timeBank = elapsed, runSinceMillis = null)
+            _uiState.update { it.copy(game = paused, elapsedSeconds = elapsed) }
+        }
         persistNow()
     }
 
@@ -165,6 +168,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
         val resumed = session.copy(runSinceMillis = System.currentTimeMillis())
         _uiState.update { it.copy(game = resumed) }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        persistNow()
     }
 
     fun move(dir: Direction) {
@@ -223,6 +231,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 bestPulseToken = if (newBest > prevBest && prevBest > 0) cur.bestPulseToken + 1 else cur.bestPulseToken
             )
         }
+        scheduleGhostClear()
+        persistNow()
 
         if (newBest > prevBest && prevBest > 0 && now - lastRecordToastMillis > 4000L) {
             lastRecordToastMillis = now
@@ -235,7 +245,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val token = ++moveToken
         spawnJob?.cancel()
         spawnJob = viewModelScope.launch {
-            delay(55L)
+            delay(50L)
             if (token != moveToken) return@launch
             val curState = _uiState.value
             val curSession = curState.game
@@ -300,17 +310,26 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 bestPulseToken = if (newBest > prevBest && prevBest > 0) cur.bestPulseToken + 1 else cur.bestPulseToken
             )
         }
+        scheduleGhostClear()
 
         afterMoveCheck(updatedSession)
         beginInputLock()
         persistNow()
     }
 
+    private fun scheduleGhostClear() {
+        ghostClearJob?.cancel()
+        ghostClearJob = viewModelScope.launch {
+            delay(230L)
+            _uiState.update { if (it.ghosts.isEmpty()) it else it.copy(ghosts = emptyList()) }
+        }
+    }
+
     private fun beginInputLock() {
         paintBusy = true
         lockJob?.cancel()
         lockJob = viewModelScope.launch {
-            delay(72L)
+            delay(65L)
             paintBusy = false
             val next = queuedDirs.removeFirstOrNull()
             if (next != null) {
@@ -423,6 +442,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         moveToken++
         spawnJob?.cancel()
         lockJob?.cancel()
+        ghostClearJob?.cancel()
         paintBusy = false
         queuedDirs.clear()
         undoStack.clear()
@@ -453,6 +473,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         moveToken++
         spawnJob?.cancel()
         lockJob?.cancel()
+        ghostClearJob?.cancel()
         paintBusy = false
         queuedDirs.clear()
 
@@ -562,6 +583,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         moveToken++
         spawnJob?.cancel()
         lockJob?.cancel()
+        ghostClearJob?.cancel()
         paintBusy = false
         queuedDirs.clear()
         undoStack.clear()
@@ -643,8 +665,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             records = state.records
         )
         val elapsed = computeElapsed(state.game)
-        viewModelScope.launch {
-            repository.save(persisted, elapsed)
-        }
+        repository.saveAsync(persisted, elapsed)
     }
 }

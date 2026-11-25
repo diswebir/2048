@@ -16,41 +16,90 @@ import com.example.model.GameStats
 import com.example.model.PersistedState
 import com.example.model.ThemeMode
 import com.example.model.Tile
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "fa2048_store")
 
 class StateRepository(private val context: Context) {
 
     private val stateKey = stringPreferencesKey("fa2048_state_v1")
+    private val backupFile = File(context.filesDir, "fa2048_backup_v1.json")
+    private val backupTmpFile = File(context.filesDir, "fa2048_backup_v1.json.tmp")
+    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val writeMutex = Mutex()
 
-    suspend fun load(nextId: () -> Long): PersistedState {
-        return try {
+    suspend fun load(nextId: () -> Long): PersistedState = withContext(Dispatchers.IO) {
+        try {
             val prefs = context.dataStore.data.first()
-            val raw = prefs[stateKey] ?: return PersistedState()
-            decodeState(raw, nextId)
+            val raw = prefs[stateKey]
+            if (!raw.isNullOrBlank()) {
+                return@withContext decodeState(raw, nextId)
+            }
         } catch (_: Exception) {
-            PersistedState()
+            // Fall through to local atomic backup file
+        }
+        try {
+            if (backupFile.exists()) {
+                val rawBackup = backupFile.readText(Charsets.UTF_8)
+                if (rawBackup.isNotBlank()) {
+                    return@withContext decodeState(rawBackup, nextId)
+                }
+            }
+        } catch (_: Exception) {
+        }
+        PersistedState()
+    }
+
+    fun saveAsync(state: PersistedState, elapsedSeconds: Int) {
+        val json = encodeState(state, elapsedSeconds)
+        ioScope.launch {
+            writeMutex.withLock {
+                withContext(NonCancellable) {
+                    writeInternal(json)
+                }
+            }
         }
     }
 
-    suspend fun save(state: PersistedState, elapsedSeconds: Int) {
+    suspend fun clearAll() = withContext(NonCancellable + Dispatchers.IO) {
+        writeMutex.withLock {
+            try {
+                context.dataStore.edit { prefs ->
+                    prefs.remove(stateKey)
+                }
+            } catch (_: Exception) {
+            }
+            try {
+                if (backupFile.exists()) backupFile.delete()
+                if (backupTmpFile.exists()) backupTmpFile.delete()
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private suspend fun writeInternal(json: String) {
         try {
-            val json = encodeState(state, elapsedSeconds)
             context.dataStore.edit { prefs ->
                 prefs[stateKey] = json
             }
         } catch (_: Exception) {
-            // Keep running even if storage write fails
         }
-    }
-
-    suspend fun clearAll() {
         try {
-            context.dataStore.edit { prefs ->
-                prefs.remove(stateKey)
+            backupTmpFile.writeText(json, Charsets.UTF_8)
+            if (!backupTmpFile.renameTo(backupFile)) {
+                backupFile.writeText(json, Charsets.UTF_8)
+                backupTmpFile.delete()
             }
         } catch (_: Exception) {
         }

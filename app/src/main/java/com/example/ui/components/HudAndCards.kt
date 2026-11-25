@@ -1,5 +1,7 @@
 package com.example.ui.components
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -49,6 +51,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -144,26 +147,33 @@ fun HeaderBar(
 }
 
 @Composable
-private fun BrandMark(size: androidx.compose.ui.unit.Dp) {
+fun BrandMark(
+    size: androidx.compose.ui.unit.Dp,
+    modifier: Modifier = Modifier
+) {
     val colors = LocalAppColors.current
-    val shape = RoundedCornerShape(if (size <= 48.dp) 14.dp else 17.dp)
+    val cornerRadius = if (size <= 48.dp) 15.dp else if (size <= 64.dp) 19.dp else 28.dp
+    val shape = RoundedCornerShape(cornerRadius)
+    val innerPad = (size.value * 0.11f).dp
+    val cellGap = (size.value * 0.06f).dp
+    val cellRadius = (size.value * 0.09f).dp
     Box(
-        modifier = Modifier
+        modifier = modifier
             .size(size)
-            .shadow(12.dp, shape, ambientColor = colors.brand, spotColor = colors.brand)
+            .shadow(14.dp, shape, ambientColor = colors.brand, spotColor = colors.brand2)
             .clip(shape)
-            .background(Brush.linearGradient(listOf(colors.brand, colors.brand2)))
-            .border(1.dp, Color.White.copy(alpha = 0.35f), shape)
-            .padding(5.dp)
+            .background(Brush.linearGradient(listOf(colors.brand, colors.brand3, colors.brand2)))
+            .border(1.dp, Color.White.copy(alpha = 0.42f), shape)
+            .padding(innerPad)
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.fillMaxWidth()) {
-            Row(horizontalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.weight(1f)) {
-                Box(modifier = Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(4.dp)).background(Color.White.copy(alpha = 0.92f)))
-                Box(modifier = Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(4.dp)).background(Color.White.copy(alpha = 0.50f)))
+        Column(verticalArrangement = Arrangement.spacedBy(cellGap), modifier = Modifier.fillMaxWidth()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(cellGap), modifier = Modifier.weight(1f)) {
+                Box(modifier = Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(cellRadius)).background(Color.White.copy(alpha = 0.94f)))
+                Box(modifier = Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(cellRadius)).background(Color.White.copy(alpha = 0.52f)))
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.weight(1f)) {
-                Box(modifier = Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(4.dp)).background(Color.White.copy(alpha = 0.70f)))
-                Box(modifier = Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(4.dp)).background(Color.White.copy(alpha = 0.32f)))
+            Row(horizontalArrangement = Arrangement.spacedBy(cellGap), modifier = Modifier.weight(1f)) {
+                Box(modifier = Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(cellRadius)).background(Color.White.copy(alpha = 0.72f)))
+                Box(modifier = Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(cellRadius)).background(Color.White.copy(alpha = 0.34f)))
             }
         }
     }
@@ -817,25 +827,65 @@ fun QuickTipsCard(modifier: Modifier = Modifier) {
 @Composable
 fun PrivacyFooter(modifier: Modifier = Modifier) {
     val colors = LocalAppColors.current
-    Row(
+    val context = LocalContext.current
+    val telegramUrl = stringResource(R.string.creator_url)
+    Column(
         modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp, horizontal = 12.dp),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Icon(
-            imageVector = Icons.Rounded.Lock,
-            contentDescription = stringResource(R.string.cd_lock),
-            tint = colors.muted.copy(alpha = 0.75f),
-            modifier = Modifier.size(14.dp)
-        )
-        Spacer(modifier = Modifier.width(6.dp))
-        Text(
-            text = stringResource(R.string.footer_privacy),
-            style = MaterialTheme.typography.bodySmall,
-            color = colors.muted,
-            textAlign = TextAlign.Center
-        )
+        Row(
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Lock,
+                contentDescription = stringResource(R.string.cd_lock),
+                tint = colors.muted.copy(alpha = 0.75f),
+                modifier = Modifier.size(14.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = stringResource(R.string.footer_privacy),
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.muted,
+                textAlign = TextAlign.Center
+            )
+        }
+
+        Row(
+            modifier = Modifier
+                .clip(CircleShape)
+                .background(colors.glass)
+                .border(1.dp, colors.line, CircleShape)
+                .clickable {
+                    runCatching {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(telegramUrl)))
+                    }
+                }
+                .padding(horizontal = 14.dp, vertical = 7.dp)
+                .testTag("creator_credit_link"),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = stringResource(R.string.creator_credit),
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.muted
+            )
+            Text(
+                text = "•",
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.muted.copy(alpha = 0.5f)
+            )
+            Text(
+                text = stringResource(R.string.creator_handle),
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = colors.brand2
+            )
+        }
     }
 }
