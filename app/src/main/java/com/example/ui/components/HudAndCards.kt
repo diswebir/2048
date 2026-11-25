@@ -3,18 +3,31 @@ package com.example.ui.components
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateIntAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -47,6 +60,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -91,16 +105,21 @@ fun HeaderBar(
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(if (compactHeader) 10.dp else 12.dp),
             modifier = Modifier.weight(1f, fill = false)
         ) {
-            BrandMark(size = if (compactHeader) 48.dp else 56.dp)
+            BrandMark(size = if (compactHeader) 46.dp else 56.dp)
             Column {
                 Text(
                     text = FaFormat.toDigits("2048", digitsMode),
-                    style = if (compactHeader) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.displaySmall,
+                    style = if (compactHeader) {
+                        MaterialTheme.typography.headlineSmall.copy(fontSize = 21.sp)
+                    } else {
+                        MaterialTheme.typography.displaySmall
+                    },
                     color = colors.text,
-                    maxLines = 1
+                    maxLines = 1,
+                    softWrap = false
                 )
                 if (!compactHeader) {
                     Text(
@@ -114,32 +133,34 @@ fun HeaderBar(
             }
         }
 
-        Spacer(modifier = Modifier.width(12.dp))
+        Spacer(modifier = Modifier.width(8.dp))
 
         Row(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(if (compactHeader) 8.dp else 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             ScoreCard(
                 label = stringResource(R.string.label_score),
-                valueText = FaFormat.fmt(score, digitsMode),
+                value = score,
                 isBest = false,
                 animEnabled = animEnabled,
                 pulseToken = scoreGainToken,
                 gainAmount = scoreGain,
                 gainToken = scoreGainToken,
                 digitsMode = digitsMode,
+                compact = compactHeader,
                 modifier = Modifier.testTag("score_card")
             )
             ScoreCard(
                 label = stringResource(R.string.label_best),
-                valueText = FaFormat.fmt(best, digitsMode),
+                value = best,
                 isBest = true,
                 animEnabled = animEnabled,
                 pulseToken = bestPulseToken,
                 gainAmount = 0,
                 gainToken = 0L,
                 digitsMode = digitsMode,
+                compact = compactHeader,
                 modifier = Modifier.testTag("best_card")
             )
         }
@@ -163,17 +184,17 @@ fun BrandMark(
             .shadow(14.dp, shape, ambientColor = colors.brand, spotColor = colors.brand2)
             .clip(shape)
             .background(Brush.linearGradient(listOf(colors.brand, colors.brand3, colors.brand2)))
-            .border(1.dp, Color.White.copy(alpha = 0.42f), shape)
+            .border(1.dp, Color.White.copy(alpha = 0.44f), shape)
             .padding(innerPad)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(cellGap), modifier = Modifier.fillMaxWidth()) {
             Row(horizontalArrangement = Arrangement.spacedBy(cellGap), modifier = Modifier.weight(1f)) {
                 Box(modifier = Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(cellRadius)).background(Color.White.copy(alpha = 0.94f)))
-                Box(modifier = Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(cellRadius)).background(Color.White.copy(alpha = 0.52f)))
+                Box(modifier = Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(cellRadius)).background(Color.White.copy(alpha = 0.54f)))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(cellGap), modifier = Modifier.weight(1f)) {
-                Box(modifier = Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(cellRadius)).background(Color.White.copy(alpha = 0.72f)))
-                Box(modifier = Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(cellRadius)).background(Color.White.copy(alpha = 0.34f)))
+                Box(modifier = Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(cellRadius)).background(Color.White.copy(alpha = 0.74f)))
+                Box(modifier = Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(cellRadius)).background(Color.White.copy(alpha = 0.36f)))
             }
         }
     }
@@ -182,13 +203,14 @@ fun BrandMark(
 @Composable
 private fun ScoreCard(
     label: String,
-    valueText: String,
+    value: Int,
     isBest: Boolean,
     animEnabled: Boolean,
     pulseToken: Long,
     gainAmount: Int,
     gainToken: Long,
     digitsMode: DigitsMode,
+    compact: Boolean,
     modifier: Modifier = Modifier
 ) {
     val colors = LocalAppColors.current
@@ -196,11 +218,23 @@ private fun ScoreCard(
     val gainProgress = remember { Animatable(0f) }
     var visibleGain by remember { mutableStateOf<Int?>(null) }
 
+    val displayedValue by animateIntAsState(
+        targetValue = value,
+        animationSpec = if (animEnabled) tween(durationMillis = 240) else snap(),
+        label = "scoreRoll"
+    )
+    val valueText = FaFormat.fmt(displayedValue, digitsMode)
+    val valueFontSize = when {
+        valueText.length >= 7 -> if (compact) 14.sp else 16.sp
+        valueText.length >= 5 -> if (compact) 16.sp else 18.sp
+        else -> if (compact) 18.sp else 20.sp
+    }
+
     LaunchedEffect(pulseToken) {
         if (pulseToken > 0L && animEnabled) {
             pulseScale.snapTo(1f)
-            pulseScale.animateTo(1.07f, tween(160))
-            pulseScale.animateTo(1f, tween(220))
+            pulseScale.animateTo(1.08f, tween(130))
+            pulseScale.animateTo(1f, spring(dampingRatio = 0.65f, stiffness = 700f))
         }
     }
 
@@ -224,7 +258,7 @@ private fun ScoreCard(
     Box(modifier = modifier, contentAlignment = Alignment.TopCenter) {
         Column(
             modifier = Modifier
-                .defaultMinSize(minWidth = 88.dp)
+                .defaultMinSize(minWidth = if (compact) 78.dp else 94.dp)
                 .graphicsLayer {
                     scaleX = pulseScale.value
                     scaleY = pulseScale.value
@@ -232,7 +266,7 @@ private fun ScoreCard(
                 .clip(shape)
                 .background(bgBrush)
                 .border(1.dp, borderColor, shape)
-                .padding(horizontal = 14.dp, vertical = 8.dp),
+                .padding(horizontal = if (compact) 10.dp else 14.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Row(
@@ -251,22 +285,24 @@ private fun ScoreCard(
                     text = label,
                     style = MaterialTheme.typography.labelSmall,
                     color = colors.muted,
-                    maxLines = 1
+                    maxLines = 1,
+                    softWrap = false
                 )
             }
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = valueText,
-                style = MaterialTheme.typography.headlineSmall.copy(fontSize = 20.sp),
+                style = MaterialTheme.typography.headlineSmall.copy(fontSize = valueFontSize),
                 color = if (isBest) colors.goldText else colors.text,
-                maxLines = 1
+                maxLines = 1,
+                softWrap = false
             )
         }
 
         visibleGain?.let { amt ->
             val p = gainProgress.value
             val alpha = if (p < 0.25f) p / 0.25f else (1f - (p - 0.25f) / 0.75f).coerceIn(0f, 1f)
-            val yOffset = (-8 - (p * 30)).roundToInt()
+            val yOffset = (-8 - (p * 32)).roundToInt()
             Text(
                 text = "+${FaFormat.fmt(amt, digitsMode)}",
                 color = colors.good,
@@ -369,14 +405,25 @@ fun PrimaryGradientButton(
 ) {
     val colors = LocalAppColors.current
     val shape = RoundedCornerShape(14.dp)
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(
+        targetValue = if (pressed) 0.965f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = 900f),
+        label = "primaryBtnScale"
+    )
     Row(
         modifier = modifier
             .minimumInteractiveComponentSize()
+            .graphicsLayer {
+                scaleX = pressScale
+                scaleY = pressScale
+            }
             .height(height)
             .shadow(10.dp, shape, ambientColor = colors.brand3, spotColor = colors.brand3)
             .clip(shape)
             .background(Brush.linearGradient(listOf(colors.brand, colors.brand3)))
-            .clickable(onClick = onClick)
+            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
             .padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
@@ -394,7 +441,8 @@ fun PrimaryGradientButton(
             text = text,
             style = MaterialTheme.typography.labelLarge,
             color = Color.White,
-            maxLines = 1
+            maxLines = 1,
+            softWrap = false
         )
     }
 }
@@ -414,16 +462,27 @@ fun GlassButton(
     val bg = if (isDanger) colors.dangerBg else colors.glass2
     val border = if (isDanger) colors.dangerBorder else colors.line
     val fg = if (isDanger) colors.dangerText else colors.text
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(
+        targetValue = if (pressed && enabled) 0.965f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = 900f),
+        label = "glassBtnScale"
+    )
 
     Row(
         modifier = modifier
             .minimumInteractiveComponentSize()
+            .graphicsLayer {
+                scaleX = pressScale
+                scaleY = pressScale
+            }
             .height(height)
             .alpha(if (enabled) 1f else 0.42f)
             .clip(shape)
             .background(bg)
             .border(1.dp, border, shape)
-            .clickable(enabled = enabled, onClick = onClick)
+            .clickable(enabled = enabled, interactionSource = interactionSource, indication = null, onClick = onClick)
             .padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
@@ -441,7 +500,8 @@ fun GlassButton(
             text = text,
             style = MaterialTheme.typography.labelLarge,
             color = fg,
-            maxLines = 1
+            maxLines = 1,
+            softWrap = false
         )
     }
 }
@@ -457,14 +517,25 @@ fun ToolbarIconButton(
 ) {
     val colors = LocalAppColors.current
     val shape = RoundedCornerShape(14.dp)
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(
+        targetValue = if (pressed && enabled) 0.92f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = 900f),
+        label = "iconBtnScale"
+    )
     Box(
         modifier = modifier
             .size(48.dp)
+            .graphicsLayer {
+                scaleX = pressScale
+                scaleY = pressScale
+            }
             .alpha(if (enabled) 1f else 0.4f)
             .clip(shape)
             .background(colors.glass2)
             .border(1.dp, colors.line, shape)
-            .clickable(enabled = enabled, onClick = onClick),
+            .clickable(enabled = enabled, interactionSource = interactionSource, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Icon(
@@ -517,10 +588,23 @@ fun StatusCard(
     elapsedSeconds: Int,
     stats: GameStats,
     digitsMode: DigitsMode,
+    animEnabled: Boolean,
     modifier: Modifier = Modifier
 ) {
     val colors = LocalAppColors.current
-    val progressPct = ((ln(max(2, maxTile).toDouble()) / ln(2.0)) / 11.0).toFloat().coerceIn(0f, 1f)
+    val targetProgress = ((ln(max(2, maxTile).toDouble()) / ln(2.0)) / 11.0).toFloat().coerceIn(0f, 1f)
+    val animatedProgress by animateFloatAsState(
+        targetValue = targetProgress,
+        animationSpec = if (animEnabled) spring(dampingRatio = 0.85f, stiffness = 300f) else snap(),
+        label = "milestoneProgress"
+    )
+    val sheenTransition = rememberInfiniteTransition(label = "barSheen")
+    val barSheen by sheenTransition.animateFloat(
+        initialValue = -0.3f,
+        targetValue = 1.3f,
+        animationSpec = infiniteRepeatable(tween(2200, easing = LinearEasing), RepeatMode.Restart),
+        label = "barSheenX"
+    )
 
     GlassCard(title = stringResource(R.string.section_status), modifier = modifier) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -583,17 +667,30 @@ fun StatusCard(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(8.dp)
+                .height(9.dp)
                 .clip(CircleShape)
                 .background(colors.cell)
         ) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(progressPct)
+                    .fillMaxWidth(animatedProgress)
                     .fillMaxHeight()
                     .clip(CircleShape)
                     .background(Brush.horizontalGradient(listOf(colors.brand2, colors.brand, colors.gold)))
-            )
+            ) {
+                if (animEnabled) {
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val cx = size.width * barSheen
+                        drawRect(
+                            brush = Brush.horizontalGradient(
+                                colors = listOf(Color.Transparent, Color.White.copy(alpha = 0.42f), Color.Transparent),
+                                startX = cx - size.height * 4f,
+                                endX = cx + size.height * 4f
+                            )
+                        )
+                    }
+                }
+            }
         }
     }
 }

@@ -57,11 +57,13 @@
     <string name="settings_anim_title">انیمیشن‌ها</string>
     <string name="settings_anim_desc">حرکت نرم خانه‌ها و جلوه‌های تصویری</string>
     <string name="settings_reset_btn">حذف همه داده‌ها</string>
-    <string name="settings_version">ذخیره‌سازی محلی — نسخه ۱.۰.۰</string>
+    <string name="settings_version">ذخیره‌سازی محلی — نسخه ۱.۱.۰</string>
     <string name="creator_credit">ساخته شده توسط رضا جنترانی</string>
     <string name="creator_handle">t.me/disreza</string>
     <string name="creator_url">https://t.me/disreza</string>
     <string name="splash_subtitle">بازی پازل اعداد</string>
+    <string name="splash_version">نسخه ۱.۱.۰</string>
+    <string name="combo_badge">کمبو ×%1$s</string>
 
     <string name="help_title">راهنمای بازی</string>
     <string name="help_rule_1_title">هدف:</string>

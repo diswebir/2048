@@ -3,7 +3,12 @@ package com.example.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -13,6 +18,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -23,6 +29,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -32,8 +39,9 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -47,6 +55,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -66,9 +76,9 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.R
 import com.example.game.GameEngine
+import com.example.model.DigitsMode
 import com.example.model.Direction
 import com.example.ui.components.AllRecordsDialog
-import com.example.ui.components.BrandMark
 import com.example.ui.components.ConfettiOverlay
 import com.example.ui.components.ConfirmDialog
 import com.example.ui.components.ControlsCard
@@ -86,6 +96,7 @@ import com.example.ui.theme.LocalAppColors
 import com.example.ui.theme.Puzzle2048Theme
 import com.example.util.FaFormat
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun GameScreen(viewModel: GameViewModel) {
@@ -94,7 +105,7 @@ fun GameScreen(viewModel: GameViewModel) {
 
     LaunchedEffect(state.isReady) {
         if (state.isReady && showSplash) {
-            delay(920L)
+            delay(1050L)
             showSplash = false
         }
     }
@@ -115,6 +126,18 @@ fun GameScreen(viewModel: GameViewModel) {
 
     Puzzle2048Theme(themeMode = state.settings.theme) {
         val colors = LocalAppColors.current
+        val bgTransition = rememberInfiniteTransition(label = "ambientGlow")
+        val driftPhase by bgTransition.animateFloat(
+            initialValue = -1f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 8500, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "ambientDrift"
+        )
+        val drift = if (state.settings.anim) driftPhase else 0f
+
         Scaffold(
             containerColor = colors.bgBase,
             contentWindowInsets = WindowInsets.safeDrawing
@@ -150,33 +173,37 @@ fun GameScreen(viewModel: GameViewModel) {
                         }
                     }
             ) {
+                // Living ambient background glow orbs
                 Canvas(modifier = Modifier.fillMaxSize()) {
+                    val pCenter = Offset(size.width * (0.86f + drift * 0.04f), -size.height * (0.05f - drift * 0.02f))
                     drawCircle(
                         brush = Brush.radialGradient(
                             colors = listOf(colors.bgGlowPurple, Color.Transparent),
-                            center = Offset(size.width * 0.88f, -size.height * 0.06f),
-                            radius = size.maxDimension * 0.55f
+                            center = pCenter,
+                            radius = size.maxDimension * 0.56f
                         ),
-                        radius = size.maxDimension * 0.55f,
-                        center = Offset(size.width * 0.88f, -size.height * 0.06f)
+                        radius = size.maxDimension * 0.56f,
+                        center = pCenter
                     )
+                    val cCenter = Offset(size.width * (0.06f - drift * 0.04f), size.height * (0.10f + drift * 0.03f))
                     drawCircle(
                         brush = Brush.radialGradient(
                             colors = listOf(colors.bgGlowCyan, Color.Transparent),
-                            center = Offset(size.width * 0.04f, size.height * 0.08f),
-                            radius = size.maxDimension * 0.45f
+                            center = cCenter,
+                            radius = size.maxDimension * 0.46f
                         ),
-                        radius = size.maxDimension * 0.45f,
-                        center = Offset(size.width * 0.04f, size.height * 0.08f)
+                        radius = size.maxDimension * 0.46f,
+                        center = cCenter
                     )
+                    val rCenter = Offset(size.width * (0.52f + drift * 0.03f), size.height * 1.04f)
                     drawCircle(
                         brush = Brush.radialGradient(
                             colors = listOf(colors.bgGlowCoral, Color.Transparent),
-                            center = Offset(size.width * 0.52f, size.height * 1.05f),
+                            center = rCenter,
                             radius = size.maxDimension * 0.50f
                         ),
                         radius = size.maxDimension * 0.50f,
-                        center = Offset(size.width * 0.52f, size.height * 1.05f)
+                        center = rCenter
                     )
                 }
 
@@ -239,6 +266,12 @@ fun GameScreen(viewModel: GameViewModel) {
                                                 animEnabled = state.settings.anim,
                                                 ghosts = state.ghosts,
                                                 ghostToken = state.ghostToken,
+                                                mergeBursts = state.mergeBursts,
+                                                mergeBurstToken = state.mergeBurstToken,
+                                                swipeGlowDir = state.swipeGlowDir,
+                                                swipeGlowToken = state.swipeGlowToken,
+                                                comboCount = state.comboCount,
+                                                comboToken = state.comboToken,
                                                 nudgeDir = state.nudgeDir,
                                                 nudgeToken = state.nudgeToken,
                                                 onSwipe = viewModel::move,
@@ -267,7 +300,8 @@ fun GameScreen(viewModel: GameViewModel) {
                                             moves = state.game.moves,
                                             elapsedSeconds = state.elapsedSeconds,
                                             stats = state.stats,
-                                            digitsMode = state.settings.digits
+                                            digitsMode = state.settings.digits,
+                                            animEnabled = state.settings.anim
                                         )
                                         ControlsCard(
                                             canUndo = state.undoCount > 0,
@@ -303,6 +337,12 @@ fun GameScreen(viewModel: GameViewModel) {
                                         animEnabled = state.settings.anim,
                                         ghosts = state.ghosts,
                                         ghostToken = state.ghostToken,
+                                        mergeBursts = state.mergeBursts,
+                                        mergeBurstToken = state.mergeBurstToken,
+                                        swipeGlowDir = state.swipeGlowDir,
+                                        swipeGlowToken = state.swipeGlowToken,
+                                        comboCount = state.comboCount,
+                                        comboToken = state.comboToken,
                                         nudgeDir = state.nudgeDir,
                                         nudgeToken = state.nudgeToken,
                                         onSwipe = viewModel::move,
@@ -323,7 +363,8 @@ fun GameScreen(viewModel: GameViewModel) {
                                         moves = state.game.moves,
                                         elapsedSeconds = state.elapsedSeconds,
                                         stats = state.stats,
-                                        digitsMode = state.settings.digits
+                                        digitsMode = state.settings.digits,
+                                        animEnabled = state.settings.anim
                                     )
                                     ControlsCard(
                                         canUndo = state.undoCount > 0,
@@ -351,6 +392,7 @@ fun GameScreen(viewModel: GameViewModel) {
                     animEnabled = state.settings.anim
                 )
 
+                // Clean single navigationBarsPadding so bottom toast never gets double-padded
                 AnimatedVisibility(
                     visible = state.toast != null,
                     enter = fadeIn() + slideInVertically { it / 2 },
@@ -358,7 +400,6 @@ fun GameScreen(viewModel: GameViewModel) {
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .navigationBarsPadding()
-                        .windowInsetsPadding(WindowInsets.safeDrawing)
                         .padding(horizontal = 16.dp, vertical = 18.dp)
                 ) {
                     state.toast?.let { msg ->
@@ -366,11 +407,11 @@ fun GameScreen(viewModel: GameViewModel) {
                     }
                 }
 
-                // Soft entrance logo splash overlay
+                // Soft animated entrance logo splash overlay
                 AnimatedVisibility(
                     visible = showSplash,
                     enter = fadeIn(tween(180)),
-                    exit = fadeOut(tween(380)) + scaleOut(targetScale = 1.04f, animationSpec = tween(380))
+                    exit = fadeOut(tween(420)) + scaleOut(targetScale = 1.05f, animationSpec = tween(420))
                 ) {
                     SplashIntroOverlay(
                         digitsMode = state.settings.digits,
@@ -434,26 +475,45 @@ fun GameScreen(viewModel: GameViewModel) {
 
 @Composable
 private fun SplashIntroOverlay(
-    digitsMode: com.example.model.DigitsMode,
+    digitsMode: DigitsMode,
     onSkip: () -> Unit
 ) {
     val colors = LocalAppColors.current
-    val logoScale = remember { Animatable(0.76f) }
+    val logoScale = remember { Animatable(0.72f) }
     val logoAlpha = remember { Animatable(0f) }
+    val haloScale = remember { Animatable(0.65f) }
+    val tileScales = remember { List(4) { Animatable(0.2f) } }
     val textAlpha = remember { Animatable(0f) }
+    val textSlideY = remember { Animatable(24f) }
 
     LaunchedEffect(Unit) {
-        logoAlpha.animateTo(1f, tween(340))
-    }
-    LaunchedEffect(Unit) {
-        logoScale.animateTo(
-            1f,
-            spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow)
-        )
-    }
-    LaunchedEffect(Unit) {
-        delay(160L)
-        textAlpha.animateTo(1f, tween(380))
+        launch { logoAlpha.animateTo(1f, tween(340)) }
+        launch {
+            logoScale.animateTo(
+                1f,
+                spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow)
+            )
+        }
+        launch {
+            haloScale.animateTo(1.18f, tween(880, easing = FastOutSlowInEasing))
+        }
+        tileScales.forEachIndexed { i, anim ->
+            launch {
+                delay(70L * i)
+                anim.animateTo(
+                    1f,
+                    spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = 620f)
+                )
+            }
+        }
+        launch {
+            delay(200L)
+            textAlpha.animateTo(1f, tween(380))
+        }
+        launch {
+            delay(200L)
+            textSlideY.animateTo(0f, spring(dampingRatio = 0.82f, stiffness = 420f))
+        }
     }
 
     Box(
@@ -471,33 +531,89 @@ private fun SplashIntroOverlay(
             ),
         contentAlignment = Alignment.Center
     ) {
-        Canvas(modifier = Modifier.size(320.dp)) {
+        Canvas(
+            modifier = Modifier
+                .size(340.dp)
+                .graphicsLayer {
+                    scaleX = haloScale.value
+                    scaleY = haloScale.value
+                }
+        ) {
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(colors.brand.copy(alpha = 0.28f), colors.brand2.copy(alpha = 0.12f), Color.Transparent)
+                    colors = listOf(
+                        colors.brand.copy(alpha = 0.30f),
+                        colors.brand2.copy(alpha = 0.14f),
+                        Color.Transparent
+                    )
                 )
             )
         }
 
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            BrandMark(
-                size = 96.dp,
-                modifier = Modifier.graphicsLayer {
-                    scaleX = logoScale.value
-                    scaleY = logoScale.value
-                    alpha = logoAlpha.value
+            val shape = RoundedCornerShape(30.dp)
+            Box(
+                modifier = Modifier
+                    .size(104.dp)
+                    .graphicsLayer {
+                        scaleX = logoScale.value
+                        scaleY = logoScale.value
+                        alpha = logoAlpha.value
+                    }
+                    .shadow(20.dp, shape, ambientColor = colors.brand, spotColor = colors.brand2)
+                    .clip(shape)
+                    .background(Brush.linearGradient(listOf(colors.brand, colors.brand3, colors.brand2)))
+                    .border(1.25.dp, Color.White.copy(alpha = 0.45f), shape)
+                    .padding(11.dp)
+            ) {
+                val alphas = listOf(0.95f, 0.56f, 0.74f, 0.36f)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxSize()) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.weight(1f)) {
+                        for (idx in 0..1) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .graphicsLayer {
+                                        scaleX = tileScales[idx].value
+                                        scaleY = tileScales[idx].value
+                                    }
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color.White.copy(alpha = alphas[idx]))
+                            )
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.weight(1f)) {
+                        for (idx in 2..3) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .graphicsLayer {
+                                        scaleX = tileScales[idx].value
+                                        scaleY = tileScales[idx].value
+                                    }
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color.White.copy(alpha = alphas[idx]))
+                            )
+                        }
+                    }
                 }
-            )
+            }
+
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.graphicsLayer { alpha = textAlpha.value }
+                modifier = Modifier.graphicsLayer {
+                    alpha = textAlpha.value
+                    translationY = textSlideY.value
+                }
             ) {
                 Text(
                     text = FaFormat.toDigits("2048", digitsMode),
-                    style = MaterialTheme.typography.displaySmall.copy(fontSize = 34.sp),
+                    style = MaterialTheme.typography.displaySmall.copy(fontSize = 36.sp),
                     fontWeight = FontWeight.ExtraBold,
                     color = colors.text
                 )
@@ -507,11 +623,25 @@ private fun SplashIntroOverlay(
                     style = MaterialTheme.typography.bodyMedium,
                     color = colors.muted
                 )
+                Spacer(modifier = Modifier.height(12.dp))
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(colors.glass2)
+                        .border(1.dp, colors.line, CircleShape)
+                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.splash_version),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.muted
+                    )
+                }
                 Spacer(modifier = Modifier.height(18.dp))
                 Text(
                     text = "${stringResource(R.string.creator_credit)} • ${stringResource(R.string.creator_handle)}",
                     style = MaterialTheme.typography.labelSmall,
-                    color = colors.brand2.copy(alpha = 0.9f)
+                    color = colors.brand2
                 )
             }
         }

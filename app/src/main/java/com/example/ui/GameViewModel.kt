@@ -42,6 +42,13 @@ data class ToastMessage(
     val text: String
 )
 
+data class MergeBurst(
+    val id: Long,
+    val r: Int,
+    val c: Int,
+    val value: Int
+)
+
 data class GameUiState(
     val isReady: Boolean = false,
     val game: GameSession = GameSession(
@@ -64,6 +71,12 @@ data class GameUiState(
     val elapsedSeconds: Int = 0,
     val ghosts: List<GhostTile> = emptyList(),
     val ghostToken: Long = 0L,
+    val mergeBursts: List<MergeBurst> = emptyList(),
+    val mergeBurstToken: Long = 0L,
+    val swipeGlowDir: Direction? = null,
+    val swipeGlowToken: Long = 0L,
+    val comboCount: Int = 0,
+    val comboToken: Long = 0L,
     val nudgeDir: Direction? = null,
     val nudgeToken: Long = 0L,
     val scoreGain: Int = 0,
@@ -80,6 +93,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val sound = SoundEngine()
     private val idCounter = AtomicLong(1L)
     private val toastCounter = AtomicLong(1L)
+    private val burstCounter = AtomicLong(1L)
 
     private val _uiState = MutableStateFlow(GameUiState())
     val uiState: StateFlow<GameUiState> = _uiState.asStateFlow()
@@ -95,6 +109,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private var spawnJob: Job? = null
     private var toastJob: Job? = null
     private var ghostClearJob: Job? = null
+    private var burstClearJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -203,9 +218,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val newScore = session.score + res.gained
         val newBest = maxOf(prevBest, newScore)
         val newStats = state.stats.copy(moves = state.stats.moves + 1)
+        val bursts = res.tiles.filter { it.merged }.map {
+            MergeBurst(id = burstCounter.getAndIncrement(), r = it.r, c = it.c, value = it.value)
+        }
+        val nextCombo = if (bursts.isNotEmpty()) state.comboCount + 1 else 0
 
         if (res.gained > 0) {
-            val mergedMax = res.tiles.filter { it.merged }.maxOfOrNull { it.value } ?: 2
+            val mergedMax = bursts.maxOfOrNull { it.value } ?: 2
             sound.merge(mergedMax)
         } else {
             sound.move()
@@ -226,12 +245,19 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 undoCount = undoStack.size,
                 ghosts = res.ghosts,
                 ghostToken = if (res.ghosts.isNotEmpty()) cur.ghostToken + 1 else cur.ghostToken,
+                mergeBursts = bursts,
+                mergeBurstToken = if (bursts.isNotEmpty()) cur.mergeBurstToken + 1 else cur.mergeBurstToken,
+                swipeGlowDir = dir,
+                swipeGlowToken = cur.swipeGlowToken + 1,
+                comboCount = nextCombo,
+                comboToken = if (nextCombo >= 2) cur.comboToken + 1 else cur.comboToken,
                 scoreGain = if (res.gained > 0) res.gained else cur.scoreGain,
                 scoreGainToken = if (res.gained > 0) cur.scoreGainToken + 1 else cur.scoreGainToken,
                 bestPulseToken = if (newBest > prevBest && prevBest > 0) cur.bestPulseToken + 1 else cur.bestPulseToken
             )
         }
         scheduleGhostClear()
+        if (bursts.isNotEmpty()) scheduleBurstClear()
         persistNow()
 
         if (newBest > prevBest && prevBest > 0 && now - lastRecordToastMillis > 4000L) {
@@ -282,9 +308,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val newScore = session.score + res.gained
         val newBest = maxOf(prevBest, newScore)
         val newStats = state.stats.copy(moves = state.stats.moves + 1)
+        val bursts = res.tiles.filter { it.merged }.map {
+            MergeBurst(id = burstCounter.getAndIncrement(), r = it.r, c = it.c, value = it.value)
+        }
+        val nextCombo = if (bursts.isNotEmpty()) state.comboCount + 1 else 0
 
         if (res.gained > 0) {
-            val mergedMax = res.tiles.filter { it.merged }.maxOfOrNull { it.value } ?: 2
+            val mergedMax = bursts.maxOfOrNull { it.value } ?: 2
             sound.merge(mergedMax)
         } else {
             sound.move()
@@ -305,12 +335,19 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 undoCount = undoStack.size,
                 ghosts = res.ghosts,
                 ghostToken = if (res.ghosts.isNotEmpty()) cur.ghostToken + 1 else cur.ghostToken,
+                mergeBursts = bursts,
+                mergeBurstToken = if (bursts.isNotEmpty()) cur.mergeBurstToken + 1 else cur.mergeBurstToken,
+                swipeGlowDir = dir,
+                swipeGlowToken = cur.swipeGlowToken + 1,
+                comboCount = nextCombo,
+                comboToken = if (nextCombo >= 2) cur.comboToken + 1 else cur.comboToken,
                 scoreGain = if (res.gained > 0) res.gained else cur.scoreGain,
                 scoreGainToken = if (res.gained > 0) cur.scoreGainToken + 1 else cur.scoreGainToken,
                 bestPulseToken = if (newBest > prevBest && prevBest > 0) cur.bestPulseToken + 1 else cur.bestPulseToken
             )
         }
         scheduleGhostClear()
+        if (bursts.isNotEmpty()) scheduleBurstClear()
 
         afterMoveCheck(updatedSession)
         beginInputLock()
@@ -322,6 +359,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         ghostClearJob = viewModelScope.launch {
             delay(230L)
             _uiState.update { if (it.ghosts.isEmpty()) it else it.copy(ghosts = emptyList()) }
+        }
+    }
+
+    private fun scheduleBurstClear() {
+        burstClearJob?.cancel()
+        burstClearJob = viewModelScope.launch {
+            delay(540L)
+            _uiState.update { if (it.mergeBursts.isEmpty()) it else it.copy(mergeBursts = emptyList()) }
         }
     }
 
@@ -443,6 +488,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         spawnJob?.cancel()
         lockJob?.cancel()
         ghostClearJob?.cancel()
+        burstClearJob?.cancel()
         paintBusy = false
         queuedDirs.clear()
         undoStack.clear()
@@ -453,6 +499,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 undoCount = 0,
                 elapsedSeconds = 0,
                 ghosts = emptyList(),
+                mergeBursts = emptyList(),
+                comboCount = 0,
                 dialog = GameDialog.None
             )
         }
@@ -474,6 +522,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         spawnJob?.cancel()
         lockJob?.cancel()
         ghostClearJob?.cancel()
+        burstClearJob?.cancel()
         paintBusy = false
         queuedDirs.clear()
 
@@ -485,7 +534,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 stats = newStats,
                 undoCount = undoStack.size,
                 elapsedSeconds = computeElapsed(restored),
-                ghosts = emptyList()
+                ghosts = emptyList(),
+                mergeBursts = emptyList(),
+                comboCount = 0
             )
         }
         persistNow()
@@ -584,6 +635,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         spawnJob?.cancel()
         lockJob?.cancel()
         ghostClearJob?.cancel()
+        burstClearJob?.cancel()
         paintBusy = false
         queuedDirs.clear()
         undoStack.clear()
@@ -600,6 +652,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 undoCount = 0,
                 elapsedSeconds = 0,
                 ghosts = emptyList(),
+                mergeBursts = emptyList(),
+                comboCount = 0,
                 dialog = GameDialog.None
             )
         }

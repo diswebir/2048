@@ -19,19 +19,29 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Configure Android SDK 36
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          SDKMANAGER="$(command -v sdkmanager || find "$SDK_ROOT/cmdline-tools" -maxdepth 3 -name sdkmanager -type f 2>/dev/null | head -n 1)"
+          if [ -z "$SDKMANAGER" ]; then
+            echo "sdkmanager not found under $SDK_ROOT" >&2
+            exit 1
+          fi
+          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+          "$SDKMANAGER" --install "platforms;android-36" "build-tools;36.0.0"
 
       - name: Set up Gradle 9.3.1
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '9.3.1'
 
@@ -60,9 +70,9 @@ jobs:
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             TAG="${GITHUB_REF_NAME}"
           else
-            TAG="v${VER:-1.0.0}"
+            TAG="v${VER:-1.1.0}"
           fi
-          echo "version=${VER:-1.0.0}" >> "$GITHUB_OUTPUT"
+          echo "version=${VER:-1.1.0}" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Build Release APK and AAB
@@ -75,11 +85,21 @@ jobs:
           cp app/build/outputs/bundle/release/app-release.aab "release-artifacts/2048-v${{ steps.version.outputs.version }}.aab"
 
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.version.outputs.tag }}
-          name: "۲۰۴۸ — نسخه ${{ steps.version.outputs.version }}"
-          generate_release_notes: true
-          files: |
-            release-artifacts/*.apk
-            release-artifacts/*.aab
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VER: ${{ steps.version.outputs.version }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" \
+              "release-artifacts/2048-v${VER}.apk" \
+              "release-artifacts/2048-v${VER}.aab" \
+              --clobber
+          else
+            gh release create "$TAG" \
+              "release-artifacts/2048-v${VER}.apk" \
+              "release-artifacts/2048-v${VER}.aab" \
+              --target "$GITHUB_SHA" \
+              --title "۲۰۴۸ — نسخه ${VER}" \
+              --generate-notes
+          fi
