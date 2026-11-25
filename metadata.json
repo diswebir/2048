@@ -1,0 +1,8 @@
+{
+  "name": "۲۰۴۸",
+  "description": "بازی پازل اعداد ۲۰۴۸ با انیمیشن‌های نرم، واگرد، آمار و ذخیره خودکار رکوردها",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -1,0 +1,271 @@
+package com.example.data
+
+import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
+import com.example.game.GameEngine
+import com.example.model.DigitsMode
+import com.example.model.GameRecord
+import com.example.model.GameSession
+import com.example.model.GameSettings
+import com.example.model.GameSnapshot
+import com.example.model.GameStats
+import com.example.model.PersistedState
+import com.example.model.ThemeMode
+import com.example.model.Tile
+import kotlinx.coroutines.flow.first
+import org.json.JSONArray
+import org.json.JSONObject
+
+private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "fa2048_store")
+
+class StateRepository(private val context: Context) {
+
+    private val stateKey = stringPreferencesKey("fa2048_state_v1")
+
+    suspend fun load(nextId: () -> Long): PersistedState {
+        return try {
+            val prefs = context.dataStore.data.first()
+            val raw = prefs[stateKey] ?: return PersistedState()
+            decodeState(raw, nextId)
+        } catch (_: Exception) {
+            PersistedState()
+        }
+    }
+
+    suspend fun save(state: PersistedState, elapsedSeconds: Int) {
+        try {
+            val json = encodeState(state, elapsedSeconds)
+            context.dataStore.edit { prefs ->
+                prefs[stateKey] = json
+            }
+        } catch (_: Exception) {
+            // Keep running even if storage write fails
+        }
+    }
+
+    suspend fun clearAll() {
+        try {
+            context.dataStore.edit { prefs ->
+                prefs.remove(stateKey)
+            }
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun encodeState(state: PersistedState, elapsedSeconds: Int): String {
+        val root = JSONObject()
+        root.put("v", 1)
+        root.put("best", state.best.coerceAtLeast(0))
+
+        val settingsObj = JSONObject().apply {
+            put("theme", when (state.settings.theme) {
+                ThemeMode.DARK -> "dark"
+                ThemeMode.LIGHT -> "light"
+                ThemeMode.AUTO -> "auto"
+            })
+            put("sound", state.settings.sound)
+            put("digits", if (state.settings.digits == DigitsMode.FA) "fa" else "en")
+            put("anim", state.settings.anim)
+        }
+        root.put("settings", settingsObj)
+
+        val statsObj = JSONObject().apply {
+            put("games", state.stats.games)
+            put("wins", state.stats.wins)
+            put("bestTile", state.stats.bestTile)
+            put("moves", state.stats.moves)
+            put("seconds", state.stats.seconds)
+        }
+        root.put("stats", statsObj)
+
+        state.session?.let { s ->
+            val tilesArr = JSONArray()
+            for (t in s.tiles) {
+                tilesArr.put(JSONArray().apply {
+                    put(t.value)
+                    put(t.r)
+                    put(t.c)
+                })
+            }
+            val sessionObj = JSONObject().apply {
+                put("tiles", tilesArr)
+                put("score", s.score)
+                put("moves", s.moves)
+                put("won", s.won)
+                put("keepPlaying", s.keepPlaying)
+                put("over", s.over)
+                put("recorded", s.recorded)
+                put("seconds", if (s.over) s.timeBank else elapsedSeconds)
+            }
+            root.put("session", sessionObj)
+        }
+
+        val historyArr = JSONArray()
+        for (snap in state.history.takeLast(GameEngine.HISTORY_LIMIT)) {
+            val tArr = JSONArray()
+            for (t in snap.tiles) {
+                tArr.put(JSONArray().apply {
+                    put(t.value)
+                    put(t.r)
+                    put(t.c)
+                })
+            }
+            historyArr.put(JSONObject().apply {
+                put("t", tArr)
+                put("score", snap.score)
+                put("moves", snap.moves)
+                put("won", snap.won)
+                put("keepPlaying", snap.keepPlaying)
+                put("over", snap.over)
+                put("recorded", snap.recorded)
+                put("timeBank", snap.timeBank)
+            })
+        }
+        root.put("history", historyArr)
+
+        val recordsArr = JSONArray()
+        for (rec in state.records.take(GameEngine.RECORD_LIMIT)) {
+            recordsArr.put(JSONObject().apply {
+                put("score", rec.score)
+                put("tile", rec.tile)
+                put("moves", rec.moves)
+                put("seconds", rec.seconds)
+                put("date", rec.dateMillis)
+            })
+        }
+        root.put("records", recordsArr)
+
+        return root.toString()
+    }
+
+    private fun decodeState(raw: String, nextId: () -> Long): PersistedState {
+        val root = JSONObject(raw)
+        val best = root.optInt("best", 0).coerceAtLeast(0)
+
+        val settingsObj = root.optJSONObject("settings")
+        val settings = if (settingsObj != null) {
+            val theme = when (settingsObj.optString("theme", "dark")) {
+                "light" -> ThemeMode.LIGHT
+                "auto" -> ThemeMode.AUTO
+                else -> ThemeMode.DARK
+            }
+            val digits = if (settingsObj.optString("digits", "fa") == "en") DigitsMode.EN else DigitsMode.FA
+            GameSettings(
+                theme = theme,
+                sound = settingsObj.optBoolean("sound", true),
+                digits = digits,
+                anim = settingsObj.optBoolean("anim", true)
+            )
+        } else {
+            GameSettings()
+        }
+
+        val statsObj = root.optJSONObject("stats")
+        val stats = if (statsObj != null) {
+            GameStats(
+                games = statsObj.optInt("games", 0).coerceAtLeast(0),
+                wins = statsObj.optInt("wins", 0).coerceAtLeast(0),
+                bestTile = statsObj.optInt("bestTile", 0).coerceAtLeast(0),
+                moves = statsObj.optInt("moves", 0).coerceAtLeast(0),
+                seconds = statsObj.optInt("seconds", 0).coerceAtLeast(0)
+            )
+        } else {
+            GameStats()
+        }
+
+        val sessionObj = root.optJSONObject("session")
+        val session = if (sessionObj != null) {
+            val tiles = decodeTiles(sessionObj.optJSONArray("tiles"), nextId)
+            if (tiles.isNotEmpty()) {
+                val over = sessionObj.optBoolean("over", false)
+                val moves = sessionObj.optInt("moves", 0).coerceAtLeast(0)
+                GameSession(
+                    tiles = tiles,
+                    score = sessionObj.optInt("score", 0).coerceAtLeast(0),
+                    moves = moves,
+                    won = sessionObj.optBoolean("won", false),
+                    showWin = false,
+                    keepPlaying = sessionObj.optBoolean("keepPlaying", false),
+                    over = over,
+                    recorded = sessionObj.optBoolean("recorded", false),
+                    timeBank = sessionObj.optInt("seconds", 0).coerceAtLeast(0),
+                    runSinceMillis = if (!over && moves > 0) System.currentTimeMillis() else null
+                )
+            } else {
+                null
+            }
+        } else {
+            null
+        }
+
+        val historyArr = root.optJSONArray("history")
+        val history = ArrayList<GameSnapshot>()
+        if (historyArr != null) {
+            for (i in 0 until historyArr.length()) {
+                val o = historyArr.optJSONObject(i) ?: continue
+                val tiles = decodeTiles(o.optJSONArray("t"), nextId)
+                if (tiles.isNotEmpty()) {
+                    history.add(
+                        GameSnapshot(
+                            tiles = tiles,
+                            score = o.optInt("score", 0).coerceAtLeast(0),
+                            moves = o.optInt("moves", 0).coerceAtLeast(0),
+                            won = o.optBoolean("won", false),
+                            keepPlaying = o.optBoolean("keepPlaying", false),
+                            over = o.optBoolean("over", false),
+                            recorded = o.optBoolean("recorded", false),
+                            timeBank = o.optInt("timeBank", 0).coerceAtLeast(0),
+                            runSinceMillis = null
+                        )
+                    )
+                }
+            }
+        }
+
+        val recordsArr = root.optJSONArray("records")
+        val records = ArrayList<GameRecord>()
+        if (recordsArr != null) {
+            for (i in 0 until recordsArr.length()) {
+                val r = recordsArr.optJSONObject(i) ?: continue
+                records.add(
+                    GameRecord(
+                        score = r.optInt("score", 0).coerceAtLeast(0),
+                        tile = r.optInt("tile", 0).coerceAtLeast(0),
+                        moves = r.optInt("moves", 0).coerceAtLeast(0),
+                        seconds = r.optInt("seconds", 0).coerceAtLeast(0),
+                        dateMillis = r.optLong("date", System.currentTimeMillis())
+                    )
+                )
+            }
+        }
+
+        return PersistedState(
+            best = best,
+            settings = settings,
+            stats = stats,
+            session = session,
+            history = history.takeLast(GameEngine.HISTORY_LIMIT),
+            records = records.take(GameEngine.RECORD_LIMIT)
+        )
+    }
+
+    private fun decodeTiles(arr: JSONArray?, nextId: () -> Long): List<Tile> {
+        if (arr == null) return emptyList()
+        val list = ArrayList<Tile>(arr.length())
+        for (i in 0 until arr.length()) {
+            val cell = arr.optJSONArray(i) ?: continue
+            if (cell.length() < 3) continue
+            val value = cell.optInt(0, 0)
+            val r = cell.optInt(1, -1)
+            val c = cell.optInt(2, -1)
+            if (value > 0 && r in 0 until GameEngine.SIZE && c in 0 until GameEngine.SIZE) {
+                list.add(Tile(id = nextId(), r = r, c = c, value = value))
+            }
+        }
+        return list
+    }
+}
