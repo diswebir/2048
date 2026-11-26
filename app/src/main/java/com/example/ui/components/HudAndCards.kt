@@ -734,7 +734,6 @@ fun ControlsCard(
     onNewGame: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val colors = LocalAppColors.current
     GlassCard(title = stringResource(R.string.section_controls), modifier = modifier) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -754,14 +753,6 @@ fun ControlsCard(
                 modifier = Modifier.weight(1f).testTag("card_new_game_button")
             )
         }
-        Spacer(modifier = Modifier.height(10.dp))
-        Text(
-            text = stringResource(R.string.controls_note),
-            style = MaterialTheme.typography.labelSmall,
-            color = colors.muted,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth()
-        )
     }
 }
 

@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -25,7 +26,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -62,11 +65,13 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.R
+import com.example.model.ColorPalette
 import com.example.model.DigitsMode
 import com.example.model.GameRecord
 import com.example.model.GameSettings
 import com.example.model.ThemeMode
 import com.example.ui.theme.LocalAppColors
+import com.example.ui.theme.palettePreviewSwatches
 import com.example.util.FaFormat
 import kotlin.math.sin
 import kotlin.random.Random
@@ -87,14 +92,14 @@ private fun StyledModalDialog(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 18.dp, vertical = 24.dp),
+                    .padding(horizontal = 16.dp, vertical = 20.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Column(
                     modifier = Modifier
-                        .widthIn(max = 520.dp)
+                        .widthIn(max = 540.dp)
                         .fillMaxWidth()
-                        .heightIn(max = 660.dp)
+                        .heightIn(max = 720.dp)
                         .clip(shape)
                         .background(Brush.linearGradient(listOf(colors.modalBgStart, colors.modalBgEnd)))
                         .border(1.dp, colors.lineStrong, shape)
@@ -140,6 +145,8 @@ private fun StyledModalDialog(
 fun SettingsDialog(
     settings: GameSettings,
     onThemeChange: (ThemeMode) -> Unit,
+    onPaletteChange: (ColorPalette) -> Unit,
+    onFullScreenTouchChange: (Boolean) -> Unit,
     onSoundChange: (Boolean) -> Unit,
     onDigitsChange: (Boolean) -> Unit,
     onAnimChange: (Boolean) -> Unit,
@@ -147,9 +154,42 @@ fun SettingsDialog(
     onDismiss: () -> Unit
 ) {
     val colors = LocalAppColors.current
+    val tips = listOf(
+        stringResource(R.string.tip_1),
+        stringResource(R.string.tip_2),
+        stringResource(R.string.tip_3),
+        stringResource(R.string.tip_4)
+    )
+    val rules = listOf(
+        stringResource(R.string.help_rule_1_title) to stringResource(R.string.help_rule_1_body),
+        stringResource(R.string.help_rule_2_title) to stringResource(R.string.help_rule_2_body),
+        stringResource(R.string.help_rule_3_title) to stringResource(R.string.help_rule_3_body),
+        stringResource(R.string.help_rule_4_title) to stringResource(R.string.help_rule_4_body)
+    )
+
     StyledModalDialog(title = stringResource(R.string.settings_title), onDismiss = onDismiss) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-            // Theme segmented setting stacked cleanly so compact phones never crush labels
+            // 1. Nude & Pastel Color Palette Selector
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Column {
+                    Text(stringResource(R.string.settings_palette_title), style = MaterialTheme.typography.titleSmall, color = colors.text)
+                    Text(stringResource(R.string.settings_palette_desc), style = MaterialTheme.typography.bodySmall, color = colors.muted)
+                }
+                ColorPaletteSelector(
+                    selected = settings.palette,
+                    onSelect = onPaletteChange,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            HorizontalDivider(color = colors.line)
+
+            // 2. Display brightness mode (Light / Dark / Auto)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -166,6 +206,17 @@ fun SettingsDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
             }
+
+            HorizontalDivider(color = colors.line)
+
+            // 3. Full-screen touch & click movement toggle
+            SettingSwitchRow(
+                title = stringResource(R.string.settings_fullscreen_touch_title),
+                subtitle = stringResource(R.string.settings_fullscreen_touch_desc),
+                checked = settings.fullScreenTouch,
+                onCheckedChange = onFullScreenTouchChange,
+                testTag = "setting_fullscreen_touch_switch"
+            )
 
             HorizontalDivider(color = colors.line)
 
@@ -197,6 +248,78 @@ fun SettingsDialog(
                 testTag = "setting_anim_switch"
             )
 
+            Spacer(modifier = Modifier.height(14.dp))
+            HorizontalDivider(color = colors.lineStrong)
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Guide, Tips & Game Description Section moved underneath Settings
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(colors.glass2)
+                    .border(1.dp, colors.line, RoundedCornerShape(16.dp))
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.section_quick_tips),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = colors.text
+                )
+
+                tips.forEach { tip ->
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .padding(top = 7.dp)
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(Brush.linearGradient(listOf(colors.brand2, colors.brand)))
+                        )
+                        Text(
+                            text = tip,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.muted
+                        )
+                    }
+                }
+
+                HorizontalDivider(color = colors.line, modifier = Modifier.padding(vertical = 4.dp))
+
+                rules.forEachIndexed { index, (head, body) ->
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .padding(top = 2.dp)
+                                .size(22.dp)
+                                .clip(RoundedCornerShape(7.dp))
+                                .background(colors.glass)
+                                .border(1.dp, colors.line, RoundedCornerShape(7.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = FaFormat.fmt(index + 1, settings.digits),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = colors.brand2
+                            )
+                        }
+                        Text(
+                            text = "$head $body",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.muted
+                        )
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(16.dp))
 
             GlassButton(
@@ -223,10 +346,28 @@ fun SettingsDialog(
                             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(telegramUrl)))
                         }
                     }
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(3.dp)
+                verticalArrangement = Arrangement.spacedBy(5.dp)
             ) {
+                Row(
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Lock,
+                        contentDescription = stringResource(R.string.cd_lock),
+                        tint = colors.muted.copy(alpha = 0.8f),
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Spacer(modifier = Modifier.width(5.dp))
+                    Text(
+                        text = stringResource(R.string.footer_privacy),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.muted,
+                        textAlign = TextAlign.Center
+                    )
+                }
                 Text(
                     text = stringResource(R.string.settings_version),
                     style = MaterialTheme.typography.labelSmall,
@@ -253,6 +394,97 @@ fun SettingsDialog(
                         fontWeight = FontWeight.Bold,
                         color = colors.brand2
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ColorPaletteSelector(
+    selected: ColorPalette,
+    onSelect: (ColorPalette) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = LocalAppColors.current
+    val items = listOf(
+        ColorPalette.NUDE_MOCHA to stringResource(R.string.palette_nude_mocha),
+        ColorPalette.PASTEL_BLUSH to stringResource(R.string.palette_pastel_blush),
+        ColorPalette.PASTEL_SAGE to stringResource(R.string.palette_pastel_sage),
+        ColorPalette.PASTEL_LAVENDER to stringResource(R.string.palette_pastel_lavender),
+        ColorPalette.PASTEL_PEACH to stringResource(R.string.palette_pastel_peach)
+    )
+
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        items.forEach { (palette, label) ->
+            val isSelected = palette == selected
+            val swatches = palettePreviewSwatches(palette)
+            val shape = RoundedCornerShape(14.dp)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(shape)
+                    .background(if (isSelected) colors.glassHover else colors.glass2)
+                    .border(
+                        width = if (isSelected) 1.6.dp else 1.dp,
+                        color = if (isSelected) colors.brand else colors.line,
+                        shape = shape
+                    )
+                    .clickable { onSelect(palette) }
+                    .padding(horizontal = 14.dp, vertical = 11.dp)
+                    .testTag("palette_opt_${palette.storageKey}"),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(22.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (isSelected) Brush.linearGradient(listOf(colors.brand, colors.brand3))
+                                else Brush.linearGradient(listOf(colors.glass, colors.glass))
+                            )
+                            .border(1.dp, if (isSelected) colors.brand else colors.lineStrong, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (isSelected) {
+                            Icon(
+                                imageVector = Icons.Rounded.Check,
+                                contentDescription = null,
+                                tint = Color(0xFFFFFBF6),
+                                modifier = Modifier.size(13.dp)
+                            )
+                        }
+                    }
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                        color = colors.text
+                    )
+                }
+
+                // 4 Nude / Pastel color swatch circles
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    swatches.forEach { swatchColor ->
+                        Box(
+                            modifier = Modifier
+                                .size(20.dp)
+                                .clip(CircleShape)
+                                .background(swatchColor)
+                                .border(1.dp, Color.Black.copy(alpha = 0.16f), CircleShape)
+                        )
+                    }
                 }
             }
         }
@@ -298,7 +530,7 @@ private fun ThemeSegmentedControl(
                     text = label,
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
-                    color = if (active) Color.White else colors.muted,
+                    color = if (active) Color(0xFFFFFBF6) else colors.muted,
                     maxLines = 1
                 )
             }
@@ -331,7 +563,7 @@ private fun SettingSwitchRow(
             onCheckedChange = onCheckedChange,
             modifier = Modifier.testTag(testTag),
             colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
+                checkedThumbColor = Color(0xFFFFFBF6),
                 checkedTrackColor = colors.brand,
                 uncheckedThumbColor = colors.text,
                 uncheckedTrackColor = colors.glass2,
@@ -592,22 +824,13 @@ fun ConfettiOverlay(
     animEnabled: Boolean
 ) {
     if (triggerToken <= 0L || !animEnabled) return
+    val colors = LocalAppColors.current
     var active by remember { mutableStateOf(false) }
     var progress by remember { mutableFloatStateOf(0f) }
 
-    val palette = remember {
-        listOf(
-            Color(0xFFF6E7D4),
-            Color(0xFFE7C49A),
-            Color(0xFFCF9A6E),
-            Color(0xFFB57E56),
-            Color(0xFF8E5D3E),
-            Color(0xFFDDB792),
-            Color(0xFF6B432C)
-        )
-    }
+    val palette = colors.confettiColors
 
-    val particles = remember(triggerToken) {
+    val particles = remember(triggerToken, palette) {
         val rnd = Random(triggerToken)
         val shapes = ConfettiShape.entries
         List(72) { idx ->

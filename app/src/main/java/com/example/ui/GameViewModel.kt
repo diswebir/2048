@@ -7,6 +7,7 @@ import com.example.R
 import com.example.audio.SoundEngine
 import com.example.data.StateRepository
 import com.example.game.GameEngine
+import com.example.model.ColorPalette
 import com.example.model.DigitsMode
 import com.example.model.Direction
 import com.example.model.GameRecord
@@ -572,6 +573,22 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (cur.theme == mode) return
         sound.click()
         _uiState.update { it.copy(settings = cur.copy(theme = mode)) }
+        persistNow()
+    }
+
+    fun setColorPalette(palette: ColorPalette) {
+        val cur = _uiState.value.settings
+        if (cur.palette == palette) return
+        sound.click()
+        _uiState.update { it.copy(settings = cur.copy(palette = palette)) }
+        persistNow()
+    }
+
+    fun setFullScreenTouch(enabled: Boolean) {
+        val cur = _uiState.value.settings
+        if (cur.fullScreenTouch == enabled) return
+        sound.click()
+        _uiState.update { it.copy(settings = cur.copy(fullScreenTouch = enabled)) }
         persistNow()
     }
 

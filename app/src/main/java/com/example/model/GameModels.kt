@@ -8,6 +8,20 @@ enum class ThemeMode {
     DARK, LIGHT, AUTO
 }
 
+enum class ColorPalette(val storageKey: String) {
+    NUDE_MOCHA("nude_mocha"),
+    PASTEL_BLUSH("pastel_blush"),
+    PASTEL_SAGE("pastel_sage"),
+    PASTEL_LAVENDER("pastel_lavender"),
+    PASTEL_PEACH("pastel_peach");
+
+    companion object {
+        fun fromKey(key: String?): ColorPalette {
+            return entries.firstOrNull { it.storageKey == key } ?: NUDE_MOCHA
+        }
+    }
+}
+
 enum class DigitsMode {
     FA, EN
 }
@@ -55,9 +69,11 @@ data class GameStats(
 
 data class GameSettings(
     val theme: ThemeMode = ThemeMode.LIGHT,
+    val palette: ColorPalette = ColorPalette.NUDE_MOCHA,
     val sound: Boolean = true,
     val digits: DigitsMode = DigitsMode.FA,
-    val anim: Boolean = true
+    val anim: Boolean = true,
+    val fullScreenTouch: Boolean = true
 )
 
 data class GameSnapshot(

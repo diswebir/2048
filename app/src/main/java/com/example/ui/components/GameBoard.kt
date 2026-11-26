@@ -123,6 +123,7 @@ fun GameBoard(
     onNewGame: () -> Unit,
     onUndo: () -> Unit,
     canUndo: Boolean,
+    boardTouchEnabled: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val colors = LocalAppColors.current
@@ -217,11 +218,12 @@ fun GameBoard(
             )
             .border(1.25.dp, colors.boardBorder, boardShape)
             .testTag("game_board")
-            .pointerInput(overlayVisible) {
-                if (overlayVisible) return@pointerInput
+            .pointerInput(overlayVisible, boardTouchEnabled) {
+                if (overlayVisible || !boardTouchEnabled) return@pointerInput
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                     val startPos = down.position
+                    var lastPos = startPos
                     var triggered = false
                     while (true) {
                         val event = awaitPointerEvent(pass = PointerEventPass.Initial)
@@ -229,10 +231,10 @@ fun GameBoard(
                         if (change == null || !change.pressed) {
                             break
                         }
-                        val dx = change.position.x - startPos.x
-                        val dy = change.position.y - startPos.y
+                        lastPos = change.position
+                        val dx = lastPos.x - startPos.x
+                        val dy = lastPos.y - startPos.y
                         val dist = hypot(dx, dy)
-                        // Consume drag early on Initial pass so parent verticalScroll never steals vertical board swipes
                         if (dist >= lockScrollSlopPx) {
                             change.consume()
                         }
@@ -250,6 +252,19 @@ fun GameBoard(
                                 onSwipe(dir)
                             }
                         }
+                    }
+                    if (!triggered && hypot(lastPos.x - startPos.x, lastPos.y - startPos.y) < lockScrollSlopPx * 2f) {
+                        val centerX = size.width / 2f
+                        val centerY = size.height / 2f
+                        val relX = startPos.x - centerX
+                        val relY = startPos.y - centerY
+                        val dir = if (abs(relX) >= abs(relY) * 0.55f) {
+                            if (relX >= 0f) Direction.RIGHT else Direction.LEFT
+                        } else {
+                            if (relY >= 0f) Direction.DOWN else Direction.UP
+                        }
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onSwipe(dir)
                     }
                 }
             }
@@ -451,6 +466,7 @@ private fun MergeBurstOverlay(
         }
     }
 
+    val colors = LocalAppColors.current
     Canvas(
         modifier = Modifier
             .fillMaxSize()
@@ -463,7 +479,7 @@ private fun MergeBurstOverlay(
         for (burst in bursts) {
             val cx = gapPx + (tilePx + gapPx) * burst.c + tilePx / 2f
             val cy = gapPx + (tilePx + gapPx) * burst.r + tilePx / 2f
-            val style = tileStyleFor(burst.value, isLight)
+            val style = tileStyleFor(burst.value, isLight, colors.palette)
             val color = style.particleColor
 
             // Expanding shockwave ring
@@ -676,7 +692,8 @@ private fun TileFace(
     sheenProgress: Float,
     modifier: Modifier = Modifier
 ) {
-    val style = tileStyleFor(value, isLight)
+    val colors = LocalAppColors.current
+    val style = tileStyleFor(value, isLight, colors.palette)
     val len = value.toString().length
     val fontFactor = when (len) {
         1, 2 -> 0.42f

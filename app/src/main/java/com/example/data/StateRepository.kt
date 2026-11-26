@@ -116,9 +116,11 @@ class StateRepository(private val context: Context) {
                 ThemeMode.LIGHT -> "light"
                 ThemeMode.AUTO -> "auto"
             })
+            put("palette", state.settings.palette.storageKey)
             put("sound", state.settings.sound)
             put("digits", if (state.settings.digits == DigitsMode.FA) "fa" else "en")
             put("anim", state.settings.anim)
+            put("fullScreenTouch", state.settings.fullScreenTouch)
         }
         root.put("settings", settingsObj)
 
@@ -202,12 +204,17 @@ class StateRepository(private val context: Context) {
                 "auto" -> ThemeMode.AUTO
                 else -> ThemeMode.LIGHT
             }
+            val palette = com.example.model.ColorPalette.fromKey(
+                settingsObj.optString("palette", com.example.model.ColorPalette.NUDE_MOCHA.storageKey)
+            )
             val digits = if (settingsObj.optString("digits", "fa") == "en") DigitsMode.EN else DigitsMode.FA
             GameSettings(
                 theme = theme,
+                palette = palette,
                 sound = settingsObj.optBoolean("sound", true),
                 digits = digits,
-                anim = settingsObj.optBoolean("anim", true)
+                anim = settingsObj.optBoolean("anim", true),
+                fullScreenTouch = settingsObj.optBoolean("fullScreenTouch", true)
             )
         } else {
             GameSettings()

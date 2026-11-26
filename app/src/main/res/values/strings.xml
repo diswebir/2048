@@ -15,11 +15,11 @@
     <string name="cd_undo">واگرد</string>
     <string name="cd_sound_on">صدا روشن است</string>
     <string name="cd_sound_off">صدا خاموش است</string>
-    <string name="cd_settings">تنظیمات</string>
+    <string name="cd_settings">تنظیمات و راهنما</string>
     <string name="cd_help">راهنما</string>
     <string name="cd_trophy">رکورد</string>
     <string name="cd_lock">ذخیره‌سازی محلی</string>
-    <string name="board_hint">حرکت با کشیدن انگشت یا کلیدهای جهت‌دار</string>
+    <string name="board_hint">حرکت با لمس یا کشیدن انگشت در هر جای صفحه</string>
     <string name="section_status">وضعیت بازی</string>
     <string name="stat_best_tile">بزرگ‌ترین خانه</string>
     <string name="stat_moves">حرکات</string>
@@ -27,16 +27,16 @@
     <string name="stat_games">بازی‌های کامل</string>
     <string name="progress_path_prefix">مسیر تا</string>
     <string name="section_controls">کنترل بازی</string>
-    <string name="controls_note">حرکت با کشیدن انگشت روی صفحه یا کلیدهای جهت‌دار</string>
+    <string name="controls_note">حرکت با لمس یا کشیدن انگشت روی صفحه یا کلیدهای جهت‌دار</string>
     <string name="section_records">رکوردهای شما</string>
     <string name="records_empty_card">هنوز رکوردی ثبت نشده —\nاولین بازی‌ات تمام شود تا اینجا ذخیره شود.</string>
     <string name="records_empty_modal">هنوز رکوردی ثبت نشده است.\nبازی کن تا اولین رکوردت اینجا ذخیره شود!</string>
     <string name="record_meta_format">%1$s • %2$s حرکت • %3$s</string>
-    <string name="section_quick_tips">راهنمای سریع</string>
-    <string name="tip_1">خانه‌ها را با کشیدن انگشت (سوایپ) یا کلیدهای جهت‌دار جابه‌جا کنید.</string>
-    <string name="tip_2">دو خانه با عدد یکسان با هم ادغام می‌شوند و جمعشان امتیاز می‌دهد.</string>
-    <string name="tip_3">با دکمه واگرد حرکت قبل را برگردانید و با بازی جدید از نو شروع کنید.</string>
-    <string name="tip_4">بازی و رکوردها به‌صورت خودکار در حافظه دستگاه ذخیره می‌شوند.</string>
+    <string name="section_quick_tips">راهنما و توضیحات بازی</string>
+    <string name="tip_1">با لمس یا کشیدن انگشت در هر جای صفحه (چپ، راست، بالا یا پایین)، خانه‌ها در همان جهت حرکت می‌کنند.</string>
+    <string name="tip_2">دو خانه با عدد یکسان هنگام برخورد با هم ادغام می‌شوند و جمعشان امتیاز می‌دهد.</string>
+    <string name="tip_3">با دکمه واگرد می‌توانید تا ۳۰ حرکت قبل را برگردانید یا بازی جدیدی شروع کنید.</string>
+    <string name="tip_4">بازی، رکوردها و پالت انتخابی شما به‌صورت خودکار و آفلاین در حافظه دستگاه ذخیره می‌شوند.</string>
     <string name="footer_privacy">همه‌چیز به‌صورت محلی و امن در دستگاه خودتان ذخیره می‌شود — بدون سرور و بدون ارسال داده.</string>
 
     <string name="overlay_win_title">به ۲۰۴۸ رسیدی!</string>
@@ -44,12 +44,23 @@
     <string name="overlay_over_title">بازی تمام شد</string>
     <string name="overlay_over_summary">بزرگ‌ترین خانه: %1$s • %2$s حرکت • %3$s</string>
 
-    <string name="settings_title">تنظیمات</string>
-    <string name="settings_theme_title">پوسته</string>
-    <string name="settings_theme_desc">ظاهر بازی را انتخاب کنید</string>
+    <string name="settings_title">تنظیمات و راهنما</string>
+    <string name="settings_theme_title">حالت نمایش</string>
+    <string name="settings_theme_desc">روشنایی صفحه را انتخاب کنید</string>
     <string name="theme_dark">تیره</string>
     <string name="theme_light">روشن</string>
     <string name="theme_auto">سیستم</string>
+
+    <string name="settings_palette_title">پالت رنگی (نود و پاستیلی)</string>
+    <string name="settings_palette_desc">تم رنگی ملایم و دلخواه خود را انتخاب کنید</string>
+    <string name="palette_nude_mocha">کرم و موکا</string>
+    <string name="palette_pastel_blush">رز پاستیلی</string>
+    <string name="palette_pastel_sage">سبز مریم‌گلی</string>
+    <string name="palette_pastel_lavender">یاسی پاستیلی</string>
+    <string name="palette_pastel_peach">هلویی و ماسه‌ای</string>
+
+    <string name="settings_fullscreen_touch_title">لمس و حرکت در کل صفحه</string>
+    <string name="settings_fullscreen_touch_desc">حرکت چپ، راست، بالا و پایین با لمس یا کشیدن در هر جای صفحه</string>
     <string name="settings_sound_title">صدای بازی</string>
     <string name="settings_sound_desc">افکت‌های صوتی حرکت و ادغام</string>
     <string name="settings_digits_title">اعداد فارسی</string>
@@ -57,12 +68,12 @@
     <string name="settings_anim_title">انیمیشن‌ها</string>
     <string name="settings_anim_desc">حرکت نرم خانه‌ها و جلوه‌های تصویری</string>
     <string name="settings_reset_btn">حذف همه داده‌ها</string>
-    <string name="settings_version">ذخیره‌سازی محلی — نسخه ۱.۱.۰</string>
+    <string name="settings_version">ذخیره‌سازی محلی — نسخه ۱.۲.۰</string>
     <string name="creator_credit">ساخته شده توسط رضا جنترانی</string>
     <string name="creator_handle">t.me/disreza</string>
     <string name="creator_url">https://t.me/disreza</string>
     <string name="splash_subtitle">بازی پازل اعداد</string>
-    <string name="splash_version">نسخه ۱.۱.۰</string>
+    <string name="splash_version">نسخه ۱.۲.۰</string>
     <string name="combo_badge">کمبو ×%1$s</string>
 
     <string name="help_title">راهنمای بازی</string>

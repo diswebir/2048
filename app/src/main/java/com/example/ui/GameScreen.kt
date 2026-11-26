@@ -21,6 +21,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -61,14 +63,18 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -86,8 +92,6 @@ import com.example.ui.components.GameBoard
 import com.example.ui.components.GameToolbar
 import com.example.ui.components.HeaderBar
 import com.example.ui.components.HelpDialog
-import com.example.ui.components.PrivacyFooter
-import com.example.ui.components.QuickTipsCard
 import com.example.ui.components.RecordsCard
 import com.example.ui.components.SettingsDialog
 import com.example.ui.components.StatusCard
@@ -97,6 +101,8 @@ import com.example.ui.theme.Puzzle2048Theme
 import com.example.util.FaFormat
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.abs
+import kotlin.math.hypot
 
 @Composable
 fun GameScreen(viewModel: GameViewModel) {
@@ -124,8 +130,16 @@ fun GameScreen(viewModel: GameViewModel) {
         viewModel.dismissDialog()
     }
 
-    Puzzle2048Theme(themeMode = state.settings.theme) {
+    Puzzle2048Theme(
+        themeMode = state.settings.theme,
+        palette = state.settings.palette
+    ) {
         val colors = LocalAppColors.current
+        val density = LocalDensity.current
+        val haptic = LocalHapticFeedback.current
+        val swipeThresholdPx = with(density) { 18.dp.toPx() }
+        val tapSlopPx = with(density) { 10.dp.toPx() }
+
         val bgTransition = rememberInfiniteTransition(label = "ambientGlow")
         val driftPhase by bgTransition.animateFloat(
             initialValue = -1f,
@@ -137,6 +151,11 @@ fun GameScreen(viewModel: GameViewModel) {
             label = "ambientDrift"
         )
         val drift = if (state.settings.anim) driftPhase else 0f
+        val fullScreenGestureActive = state.settings.fullScreenTouch &&
+            !showSplash &&
+            state.dialog == GameDialog.None &&
+            !state.game.over &&
+            !state.game.showWin
 
         Scaffold(
             containerColor = colors.bgBase,
@@ -150,6 +169,63 @@ fun GameScreen(viewModel: GameViewModel) {
                             listOf(colors.bgBase, colors.bgMid, colors.bgBase)
                         )
                     )
+                    .pointerInput(fullScreenGestureActive) {
+                        if (!fullScreenGestureActive) return@pointerInput
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                            val startPos = down.position
+                            var lastPos = startPos
+                            var triggered = false
+                            var childConsumedTap = down.isConsumed
+
+                            while (true) {
+                                val event = awaitPointerEvent(pass = PointerEventPass.Main)
+                                val change = event.changes.firstOrNull { it.id == down.id } ?: event.changes.firstOrNull()
+                                if (change == null) break
+                                if (change.isConsumed) {
+                                    childConsumedTap = true
+                                }
+                                if (!change.pressed) {
+                                    lastPos = change.position
+                                    break
+                                }
+                                lastPos = change.position
+                                val dx = lastPos.x - startPos.x
+                                val dy = lastPos.y - startPos.y
+                                val dist = hypot(dx, dy)
+                                if (!triggered && dist >= swipeThresholdPx) {
+                                    val ax = abs(dx)
+                                    val ay = abs(dy)
+                                    if (ax > ay * 1.08f || ay > ax * 1.08f) {
+                                        triggered = true
+                                        change.consume()
+                                        val dir = if (ax > ay) {
+                                            if (dx > 0f) Direction.RIGHT else Direction.LEFT
+                                        } else {
+                                            if (dy > 0f) Direction.DOWN else Direction.UP
+                                        }
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        viewModel.move(dir)
+                                    }
+                                }
+                            }
+
+                            // Direct tap/click anywhere on the screen outside buttons moves tiles left/right (or up/down in center band)
+                            val totalMove = hypot(lastPos.x - startPos.x, lastPos.y - startPos.y)
+                            if (!triggered && !childConsumedTap && totalMove < tapSlopPx) {
+                                val centerX = size.width / 2f
+                                val dxFromCenter = startPos.x - centerX
+                                val centerBand = size.width * 0.11f
+                                val dir = if (abs(dxFromCenter) >= centerBand) {
+                                    if (dxFromCenter > 0f) Direction.RIGHT else Direction.LEFT
+                                } else {
+                                    if (startPos.y < size.height * 0.42f) Direction.UP else Direction.DOWN
+                                }
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                viewModel.move(dir)
+                            }
+                        }
+                    }
                     .focusable()
                     .onPreviewKeyEvent { event ->
                         if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
@@ -220,7 +296,10 @@ fun GameScreen(viewModel: GameViewModel) {
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .verticalScroll(scrollState)
+                            .verticalScroll(
+                                state = scrollState,
+                                enabled = !state.settings.fullScreenTouch
+                            )
                             .padding(horizontal = if (compactHeader) 14.dp else 22.dp, vertical = 14.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
@@ -278,15 +357,8 @@ fun GameScreen(viewModel: GameViewModel) {
                                                 onContinueAfterWin = viewModel::continueAfterWin,
                                                 onNewGame = viewModel::requestNewGame,
                                                 onUndo = viewModel::undo,
-                                                canUndo = state.undoCount > 0
-                                            )
-                                            Spacer(modifier = Modifier.height(10.dp))
-                                            Text(
-                                                text = stringResource(R.string.board_hint),
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = colors.muted,
-                                                textAlign = TextAlign.Center,
-                                                modifier = Modifier.fillMaxWidth()
+                                                canUndo = state.undoCount > 0,
+                                                boardTouchEnabled = !state.settings.fullScreenTouch
                                             )
                                         }
                                     }
@@ -313,7 +385,6 @@ fun GameScreen(viewModel: GameViewModel) {
                                             digitsMode = state.settings.digits,
                                             onOpenAll = viewModel::openAllRecords
                                         )
-                                        QuickTipsCard()
                                     }
                                 }
                             } else {
@@ -349,14 +420,8 @@ fun GameScreen(viewModel: GameViewModel) {
                                         onContinueAfterWin = viewModel::continueAfterWin,
                                         onNewGame = viewModel::requestNewGame,
                                         onUndo = viewModel::undo,
-                                        canUndo = state.undoCount > 0
-                                    )
-                                    Text(
-                                        text = stringResource(R.string.board_hint),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = colors.muted,
-                                        textAlign = TextAlign.Center,
-                                        modifier = Modifier.fillMaxWidth()
+                                        canUndo = state.undoCount > 0,
+                                        boardTouchEnabled = !state.settings.fullScreenTouch
                                     )
                                     StatusCard(
                                         maxTile = maxTile,
@@ -366,23 +431,15 @@ fun GameScreen(viewModel: GameViewModel) {
                                         digitsMode = state.settings.digits,
                                         animEnabled = state.settings.anim
                                     )
-                                    ControlsCard(
-                                        canUndo = state.undoCount > 0,
-                                        onUndo = viewModel::undo,
-                                        onNewGame = viewModel::requestNewGame
-                                    )
                                     RecordsCard(
                                         records = state.records,
                                         digitsMode = state.settings.digits,
                                         onOpenAll = viewModel::openAllRecords
                                     )
-                                    QuickTipsCard()
                                 }
                             }
 
                             Spacer(modifier = Modifier.height(16.dp))
-                            PrivacyFooter()
-                            Spacer(modifier = Modifier.height(24.dp))
                         }
                     }
                 }
@@ -424,6 +481,8 @@ fun GameScreen(viewModel: GameViewModel) {
                     GameDialog.Settings -> SettingsDialog(
                         settings = state.settings,
                         onThemeChange = viewModel::setThemeMode,
+                        onPaletteChange = viewModel::setColorPalette,
+                        onFullScreenTouchChange = viewModel::setFullScreenTouch,
                         onSoundChange = viewModel::setSound,
                         onDigitsChange = viewModel::setDigitsMode,
                         onAnimChange = viewModel::setAnimEnabled,
