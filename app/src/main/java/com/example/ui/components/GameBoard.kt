@@ -3,14 +3,8 @@ package com.example.ui.components
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.VisibilityThreshold
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateIntOffsetAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -35,7 +29,6 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -54,11 +47,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -74,7 +68,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -96,7 +89,6 @@ import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.hypot
-import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.random.Random
 
@@ -139,7 +131,7 @@ fun GameBoard(
     LaunchedEffect(comboToken) {
         if (comboToken > 0L && comboCount >= 2 && animEnabled) {
             showCombo = true
-            delay(950L)
+            delay(850L)
             showCombo = false
         }
     }
@@ -148,8 +140,9 @@ fun GameBoard(
         if (swipeGlowToken > 0L && swipeGlowDir != null && animEnabled) {
             activeGlowDir = swipeGlowDir
             activeGlowIsError = false
-            edgeGlowAlpha.snapTo(0.85f)
-            edgeGlowAlpha.animateTo(0f, tween(280))
+            edgeGlowAlpha.snapTo(0.75f)
+            edgeGlowAlpha.animateTo(0f, tween(220))
+            activeGlowDir = null
         }
     }
 
@@ -159,63 +152,52 @@ fun GameBoard(
             if (animEnabled) {
                 activeGlowDir = nudgeDir
                 activeGlowIsError = true
-                edgeGlowAlpha.snapTo(0.9f)
-                val dist = with(density) { 8.dp.toPx() }
-                val returnSpec = spring<Float>(dampingRatio = 0.55f, stiffness = 950f)
+                edgeGlowAlpha.snapTo(0.85f)
+                val dist = with(density) { 7.dp.toPx() }
+                val returnSpec = spring<Float>(dampingRatio = 0.6f, stiffness = 950f)
                 when (nudgeDir) {
                     Direction.LEFT -> {
-                        nudgeOffsetX.animateTo(-dist, tween(60))
+                        nudgeOffsetX.animateTo(-dist, tween(55))
                         nudgeOffsetX.animateTo(0f, returnSpec)
                     }
                     Direction.RIGHT -> {
-                        nudgeOffsetX.animateTo(dist, tween(60))
+                        nudgeOffsetX.animateTo(dist, tween(55))
                         nudgeOffsetX.animateTo(0f, returnSpec)
                     }
                     Direction.UP -> {
-                        nudgeOffsetY.animateTo(-dist, tween(60))
+                        nudgeOffsetY.animateTo(-dist, tween(55))
                         nudgeOffsetY.animateTo(0f, returnSpec)
                     }
                     Direction.DOWN -> {
-                        nudgeOffsetY.animateTo(dist, tween(60))
+                        nudgeOffsetY.animateTo(dist, tween(55))
                         nudgeOffsetY.animateTo(0f, returnSpec)
                     }
                 }
-                edgeGlowAlpha.animateTo(0f, tween(220))
+                edgeGlowAlpha.animateTo(0f, tween(180))
+                activeGlowDir = null
             }
         }
     }
 
-    val boardShape = RoundedCornerShape(22.dp)
+    val boardShape = remember { RoundedCornerShape(22.dp) }
+    val boardBrush = remember(colors.boardBgStart, colors.boardBgMid, colors.boardBgEnd) {
+        Brush.linearGradient(listOf(colors.boardBgStart, colors.boardBgMid, colors.boardBgEnd))
+    }
     val overlayVisible = session.over || session.showWin
     val swipeThresholdPx = with(density) { 18.dp.toPx() }
     val lockScrollSlopPx = with(density) { 4.dp.toPx() }
-
-    // Single shared sheen phase for all high-value tiles (>= 512)
-    val sheenTransition = rememberInfiniteTransition(label = "tileSheen")
-    val sheenProgress by sheenTransition.animateFloat(
-        initialValue = -0.6f,
-        targetValue = 1.6f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2800, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "sheenProgress"
-    )
 
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
             .aspectRatio(1f)
-            .offset {
-                IntOffset(nudgeOffsetX.value.roundToInt(), nudgeOffsetY.value.roundToInt())
+            .graphicsLayer {
+                translationX = nudgeOffsetX.value
+                translationY = nudgeOffsetY.value
             }
-            .shadow(elevation = if (colors.isLight) 14.dp else 24.dp, shape = boardShape, clip = false)
+            .shadow(elevation = if (colors.isLight) 6.dp else 10.dp, shape = boardShape, clip = false)
             .clip(boardShape)
-            .background(
-                Brush.linearGradient(
-                    listOf(colors.boardBgStart, colors.boardBgMid, colors.boardBgEnd)
-                )
-            )
+            .background(boardBrush)
             .border(1.25.dp, colors.boardBorder, boardShape)
             .testTag("game_board")
             .pointerInput(overlayVisible, boardTouchEnabled) {
@@ -275,25 +257,45 @@ fun GameBoard(
         val cellRadius = if (boardSize < 340.dp) 10.dp else 12.dp
 
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                // Background empty cell grid
-                for (r in 0 until GameEngine.SIZE) {
-                    for (c in 0 until GameEngine.SIZE) {
-                        val x = gap + (tileSize + gap) * c
-                        val y = gap + (tileSize + gap) * r
-                        Box(
-                            modifier = Modifier
-                                .offset(x = x, y = y)
-                                .size(tileSize)
-                                .clip(RoundedCornerShape(cellRadius))
-                                .background(colors.cell)
-                                .border(0.75.dp, colors.cellLine, RoundedCornerShape(cellRadius))
-                        )
+            // Single GPU-cached pass draws all 16 static background slots with zero child layout nodes
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .drawWithCache {
+                        val gapPx = gap.toPx()
+                        val tilePx = tileSize.toPx()
+                        val radiusPx = cellRadius.toPx()
+                        val corner = CornerRadius(radiusPx, radiusPx)
+                        val cellSize = Size(tilePx, tilePx)
+                        val stroke = Stroke(width = 0.75.dp.toPx())
+                        val cellColor = colors.cell
+                        val borderColor = colors.cellLine
+                        onDrawBehind {
+                            for (r in 0 until GameEngine.SIZE) {
+                                val y = gapPx + (tilePx + gapPx) * r
+                                for (c in 0 until GameEngine.SIZE) {
+                                    val x = gapPx + (tilePx + gapPx) * c
+                                    val topLeft = Offset(x, y)
+                                    drawRoundRect(
+                                        color = cellColor,
+                                        topLeft = topLeft,
+                                        size = cellSize,
+                                        cornerRadius = corner
+                                    )
+                                    drawRoundRect(
+                                        color = borderColor,
+                                        topLeft = topLeft,
+                                        size = cellSize,
+                                        cornerRadius = corner,
+                                        style = stroke
+                                    )
+                                }
+                            }
+                        }
                     }
-                }
-
+            ) {
                 // Ghost tiles sliding into merge destination
-                if (animEnabled) {
+                if (animEnabled && ghosts.isNotEmpty()) {
                     for (ghost in ghosts) {
                         key(ghostToken, ghost.id) {
                             GhostTileView(
@@ -308,7 +310,7 @@ fun GameBoard(
                     }
                 }
 
-                // Active animated tiles
+                // Active animated tiles (GPU-only translation via graphicsLayer — zero layout passes per frame)
                 for (tile in session.tiles) {
                     key(tile.id) {
                         AnimatedTileView(
@@ -318,13 +320,12 @@ fun GameBoard(
                             cellRadius = cellRadius,
                             digitsMode = digitsMode,
                             animEnabled = animEnabled,
-                            isLight = colors.isLight,
-                            sheenProgress = sheenProgress
+                            isLight = colors.isLight
                         )
                     }
                 }
 
-                // Merge shockwave & radial particle burst canvas
+                // Lightweight merge shockwave & spark burst (only mounted during 300ms burst)
                 if (animEnabled && mergeBursts.isNotEmpty()) {
                     MergeBurstOverlay(
                         bursts = mergeBursts,
@@ -335,12 +336,13 @@ fun GameBoard(
                     )
                 }
 
-                // Directional edge glow pulse
-                if (animEnabled && activeGlowDir != null && edgeGlowAlpha.value > 0.01f) {
+                // Directional edge glow pulse (only mounted during 200ms pulse)
+                val glowDir = activeGlowDir
+                if (animEnabled && glowDir != null) {
                     val glowTint = if (activeGlowIsError) colors.danger else colors.brand2
                     SwipeEdgeGlowCanvas(
-                        direction = activeGlowDir!!,
-                        alpha = edgeGlowAlpha.value * if (colors.isLight) 0.45f else 0.55f,
+                        direction = glowDir,
+                        alphaProvider = { edgeGlowAlpha.value * if (colors.isLight) 0.42f else 0.50f },
                         color = glowTint
                     )
                 }
@@ -350,8 +352,8 @@ fun GameBoard(
         // Combo streak floating badge
         AnimatedVisibility(
             visible = showCombo && comboCount >= 2 && !overlayVisible,
-            enter = fadeIn(tween(140)) + scaleIn(initialScale = 0.7f, animationSpec = spring(dampingRatio = 0.6f, stiffness = 700f)) + slideInVertically { -it / 2 },
-            exit = fadeOut(tween(240)) + scaleOut(targetScale = 0.9f) + slideOutVertically { -it / 2 },
+            enter = fadeIn(tween(130)) + scaleIn(initialScale = 0.78f, animationSpec = spring(dampingRatio = 0.65f, stiffness = 700f)) + slideInVertically { -it / 2 },
+            exit = fadeOut(tween(200)) + scaleOut(targetScale = 0.92f) + slideOutVertically { -it / 2 },
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .padding(top = 10.dp)
@@ -360,10 +362,9 @@ fun GameBoard(
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                 Box(
                     modifier = Modifier
-                        .shadow(10.dp, CircleShape, ambientColor = colors.brand, spotColor = colors.gold)
                         .clip(CircleShape)
                         .background(Brush.horizontalGradient(listOf(colors.brand, colors.brand3, colors.brand2)))
-                        .border(1.dp, Color.White.copy(alpha = 0.5f), CircleShape)
+                        .border(1.dp, Color.White.copy(alpha = 0.45f), CircleShape)
                         .padding(horizontal = 14.dp, vertical = 5.dp)
                 ) {
                     Text(
@@ -379,8 +380,8 @@ fun GameBoard(
         // Win / Game Over overlays
         AnimatedVisibility(
             visible = overlayVisible,
-            enter = if (animEnabled) fadeIn(tween(220)) + scaleIn(initialScale = 0.94f, animationSpec = spring(dampingRatio = 0.78f, stiffness = 500f)) else fadeIn(snap()),
-            exit = if (animEnabled) fadeOut(tween(150)) else fadeOut(snap()),
+            enter = if (animEnabled) fadeIn(tween(200)) + scaleIn(initialScale = 0.95f) else fadeIn(snap()),
+            exit = if (animEnabled) fadeOut(tween(140)) else fadeOut(snap()),
             modifier = Modifier
                 .fillMaxSize()
                 .zIndex(10f)
@@ -417,7 +418,8 @@ fun GameBoard(
 }
 
 private data class Spark(
-    val angle: Float,
+    val cosA: Float,
+    val sinA: Float,
     val speed: Float,
     val radius: Float
 )
@@ -430,24 +432,23 @@ private fun MergeBurstOverlay(
     gap: Dp,
     isLight: Boolean
 ) {
+    val colors = LocalAppColors.current
     val density = LocalDensity.current
     val tilePx = with(density) { tileSize.toPx() }
     val gapPx = with(density) { gap.toPx() }
+    val sparkDensityScale = density.density * 0.58f
 
     val sparkMap = remember(burstToken) {
         bursts.associate { b ->
             val rnd = Random(b.id * 31L + burstToken)
-            val count = when {
-                b.value >= 1024 -> 18
-                b.value >= 128 -> 14
-                else -> 10
-            }
+            val count = if (b.value >= 256) 8 else 6
             b.id to List(count) { idx ->
-                val baseAngle = (2.0 * PI * idx / count).toFloat()
+                val angle = (2.0 * PI * idx / count).toFloat() + (rnd.nextFloat() - 0.5f) * 0.38f
                 Spark(
-                    angle = baseAngle + (rnd.nextFloat() - 0.5f) * 0.45f,
-                    speed = 0.58f + rnd.nextFloat() * 0.62f,
-                    radius = 2.5f + rnd.nextFloat() * 3.5f
+                    cosA = cos(angle),
+                    sinA = sin(angle),
+                    speed = 0.58f + rnd.nextFloat() * 0.52f,
+                    radius = 2.4f + rnd.nextFloat() * 2.6f
                 )
             }
         }
@@ -456,7 +457,7 @@ private fun MergeBurstOverlay(
     var progress by remember(burstToken) { mutableFloatStateOf(0f) }
 
     LaunchedEffect(burstToken) {
-        val durationNanos = 460_000_000L
+        val durationNanos = 300_000_000L
         val start = withFrameNanos { it }
         while (true) {
             val now = withFrameNanos { it }
@@ -466,7 +467,6 @@ private fun MergeBurstOverlay(
         }
     }
 
-    val colors = LocalAppColors.current
     Canvas(
         modifier = Modifier
             .fillMaxSize()
@@ -474,36 +474,31 @@ private fun MergeBurstOverlay(
     ) {
         val eased = 1f - (1f - progress) * (1f - progress)
         val fade = (1f - progress).coerceIn(0f, 1f)
-        if (fade <= 0.01f) return@Canvas
+        if (fade <= 0.02f) return@Canvas
 
         for (burst in bursts) {
-            val cx = gapPx + (tilePx + gapPx) * burst.c + tilePx / 2f
-            val cy = gapPx + (tilePx + gapPx) * burst.r + tilePx / 2f
-            val style = tileStyleFor(burst.value, isLight, colors.palette)
-            val color = style.particleColor
+            val cx = gapPx + (tilePx + gapPx) * burst.c + tilePx * 0.5f
+            val cy = gapPx + (tilePx + gapPx) * burst.r + tilePx * 0.5f
+            val color = tileStyleFor(burst.value, isLight, colors.palette).particleColor
 
-            // Expanding shockwave ring
-            val ringRadius = tilePx * (0.36f + eased * 0.54f)
-            val strokeW = (tilePx * 0.075f * fade).coerceAtLeast(1.5f)
+            val ringRadius = tilePx * (0.36f + eased * 0.48f)
+            val strokeW = (tilePx * 0.065f * fade).coerceAtLeast(1.5f)
             drawCircle(
-                color = color.copy(alpha = fade * 0.55f),
+                color = color.copy(alpha = fade * 0.5f),
                 radius = ringRadius,
                 center = Offset(cx, cy),
                 style = Stroke(width = strokeW)
             )
 
-            // Radial glowing sparks
             val sparks = sparkMap[burst.id].orEmpty()
-            val maxTravel = tilePx * if (burst.value >= 256) 0.92f else 0.72f
+            val maxTravel = tilePx * if (burst.value >= 256) 0.82f else 0.66f
             for (s in sparks) {
                 val dist = eased * maxTravel * s.speed
-                val sx = cx + cos(s.angle) * dist
-                val sy = cy + sin(s.angle) * dist
-                val r = s.radius * (0.4f + 0.6f * fade) * density.density * 0.6f
+                val r = s.radius * (0.45f + 0.55f * fade) * sparkDensityScale
                 drawCircle(
-                    color = color.copy(alpha = fade * 0.9f),
+                    color = color.copy(alpha = fade * 0.85f),
                     radius = r,
-                    center = Offset(sx, sy)
+                    center = Offset(cx + s.cosA * dist, cy + s.sinA * dist)
                 )
             }
         }
@@ -513,7 +508,7 @@ private fun MergeBurstOverlay(
 @Composable
 private fun SwipeEdgeGlowCanvas(
     direction: Direction,
-    alpha: Float,
+    alphaProvider: () -> Float,
     color: Color
 ) {
     Canvas(
@@ -521,7 +516,9 @@ private fun SwipeEdgeGlowCanvas(
             .fillMaxSize()
             .zIndex(4f)
     ) {
-        val thickness = size.minDimension * 0.14f
+        val alpha = alphaProvider()
+        if (alpha <= 0.01f) return@Canvas
+        val thickness = size.minDimension * 0.12f
         val brush = when (direction) {
             Direction.LEFT -> Brush.horizontalGradient(
                 colors = listOf(color.copy(alpha = alpha), Color.Transparent),
@@ -556,29 +553,24 @@ private fun AnimatedTileView(
     cellRadius: Dp,
     digitsMode: DigitsMode,
     animEnabled: Boolean,
-    isLight: Boolean,
-    sheenProgress: Float
+    isLight: Boolean
 ) {
     val density = LocalDensity.current
-    val targetXPx = with(density) { (gap + (tileSize + gap) * tile.c).toPx().roundToInt() }
-    val targetYPx = with(density) { (gap + (tileSize + gap) * tile.r).toPx().roundToInt() }
+    val targetXPx = with(density) { (gap + (tileSize + gap) * tile.c).toPx() }
+    val targetYPx = with(density) { (gap + (tileSize + gap) * tile.r).toPx() }
 
-    val animatedOffset by animateIntOffsetAsState(
-        targetValue = IntOffset(targetXPx, targetYPx),
-        animationSpec = if (animEnabled) {
-            spring(
-                dampingRatio = 0.86f,
-                stiffness = 880f,
-                visibilityThreshold = IntOffset.VisibilityThreshold
-            )
+    val animSpec = remember(animEnabled) {
+        if (animEnabled) {
+            spring<Float>(dampingRatio = 0.88f, stiffness = 920f, visibilityThreshold = 0.5f)
         } else {
             snap()
-        },
-        label = "tileOffset_${tile.id}"
-    )
+        }
+    }
+    val animX by animateFloatAsState(targetValue = targetXPx, animationSpec = animSpec, label = "tx")
+    val animY by animateFloatAsState(targetValue = targetYPx, animationSpec = animSpec, label = "ty")
 
-    val scaleAnim = remember { Animatable(if (animEnabled && (tile.spawned || tile.merged)) 0.22f else 1f) }
-    val alphaAnim = remember { Animatable(if (animEnabled && (tile.spawned || tile.merged)) 0.12f else 1f) }
+    val scaleAnim = remember { Animatable(if (animEnabled && (tile.spawned || tile.merged)) 0.25f else 1f) }
+    val alphaAnim = remember { Animatable(if (animEnabled && (tile.spawned || tile.merged)) 0.15f else 1f) }
 
     LaunchedEffect(tile.id, tile.merged, animEnabled) {
         if (!animEnabled) {
@@ -587,9 +579,9 @@ private fun AnimatedTileView(
             return@LaunchedEffect
         }
         if (tile.spawned) {
-            alphaAnim.animateTo(1f, tween(130))
+            alphaAnim.animateTo(1f, tween(115))
         } else if (tile.merged) {
-            alphaAnim.animateTo(1f, tween(95))
+            alphaAnim.animateTo(1f, tween(85))
         } else {
             alphaAnim.snapTo(1f)
         }
@@ -603,11 +595,11 @@ private fun AnimatedTileView(
         if (tile.spawned) {
             scaleAnim.animateTo(
                 1f,
-                spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = 760f)
+                spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = 780f)
             )
         } else if (tile.merged) {
-            scaleAnim.animateTo(1.15f, tween(110, delayMillis = 40, easing = PopEasing))
-            scaleAnim.animateTo(1f, spring(dampingRatio = 0.68f, stiffness = 820f))
+            scaleAnim.animateTo(1.13f, tween(95, delayMillis = 30, easing = PopEasing))
+            scaleAnim.animateTo(1f, spring(dampingRatio = 0.72f, stiffness = 860f))
         } else {
             scaleAnim.snapTo(1f)
         }
@@ -619,12 +611,11 @@ private fun AnimatedTileView(
         cellRadius = cellRadius,
         digitsMode = digitsMode,
         isLight = isLight,
-        animEnabled = animEnabled,
-        sheenProgress = sheenProgress,
         modifier = Modifier
-            .offset { animatedOffset }
             .zIndex(if (tile.merged) 3f else 2f)
             .graphicsLayer {
+                translationX = animX
+                translationY = animY
                 scaleX = scaleAnim.value
                 scaleY = scaleAnim.value
                 alpha = alphaAnim.value
@@ -647,22 +638,10 @@ private fun GhostTileView(
     val toX = with(density) { (gap + (tileSize + gap) * ghost.toC).toPx() }
     val toY = with(density) { (gap + (tileSize + gap) * ghost.toR).toPx() }
 
-    val xAnim = remember { Animatable(fromX) }
-    val yAnim = remember { Animatable(fromY) }
-    val alphaAnim = remember { Animatable(1f) }
-    val scaleAnim = remember { Animatable(1f) }
+    val progress = remember { Animatable(0f) }
 
     LaunchedEffect(ghost.id) {
-        xAnim.animateTo(toX, tween(115, easing = SlideEasing))
-    }
-    LaunchedEffect(ghost.id) {
-        yAnim.animateTo(toY, tween(115, easing = SlideEasing))
-    }
-    LaunchedEffect(ghost.id) {
-        alphaAnim.animateTo(0f, tween(110, delayMillis = 45))
-    }
-    LaunchedEffect(ghost.id) {
-        scaleAnim.animateTo(0.84f, tween(110, delayMillis = 45))
+        progress.animateTo(1f, tween(115, easing = SlideEasing))
     }
 
     TileFace(
@@ -671,13 +650,18 @@ private fun GhostTileView(
         cellRadius = cellRadius,
         digitsMode = digitsMode,
         isLight = isLight,
-        animEnabled = false,
-        sheenProgress = 0f,
         modifier = Modifier
-            .offset { IntOffset(xAnim.value.roundToInt(), yAnim.value.roundToInt()) }
             .zIndex(1f)
-            .scale(scaleAnim.value)
-            .alpha(alphaAnim.value)
+            .graphicsLayer {
+                val p = progress.value
+                translationX = fromX + (toX - fromX) * p
+                translationY = fromY + (toY - fromY) * p
+                val fade = (1f - ((p - 0.35f) / 0.65f).coerceIn(0f, 1f))
+                alpha = fade
+                val s = 1f - 0.14f * (1f - fade)
+                scaleX = s
+                scaleY = s
+            }
     )
 }
 
@@ -688,8 +672,6 @@ private fun TileFace(
     cellRadius: Dp,
     digitsMode: DigitsMode,
     isLight: Boolean,
-    animEnabled: Boolean,
-    sheenProgress: Float,
     modifier: Modifier = Modifier
 ) {
     val colors = LocalAppColors.current
@@ -704,53 +686,41 @@ private fun TileFace(
         else -> 0.16f
     }
     val fontSizeSp = (tileSize.value * fontFactor).sp
-    val shape = RoundedCornerShape(cellRadius)
+    val shape = remember(cellRadius) { RoundedCornerShape(cellRadius) }
+    val text = remember(value, digitsMode) { FaFormat.fmtTile(value, digitsMode) }
 
     Box(
         modifier = modifier
             .size(tileSize)
-            .shadow(
-                elevation = when {
-                    value >= 128 -> 11.dp
-                    isLight -> 5.dp
-                    else -> 4.dp
-                },
-                shape = shape,
-                ambientColor = if (style.glowColor != Color.Transparent) style.glowColor else Color.Black.copy(alpha = 0.22f),
-                spotColor = if (style.glowColor != Color.Transparent) style.glowColor else Color.Black.copy(alpha = 0.28f)
-            )
             .clip(shape)
             .background(style.background)
             .then(
-                if (style.borderColor != null) {
-                    Modifier.border(1.dp, style.borderColor, shape)
+                if (style.hasSheen) {
+                    Modifier.drawWithCache {
+                        val sheenBrush = Brush.linearGradient(
+                            colors = listOf(
+                                Color.White.copy(alpha = 0.24f),
+                                Color.Transparent,
+                                Color.White.copy(alpha = 0.08f)
+                            )
+                        )
+                        onDrawBehind {
+                            drawRect(brush = sheenBrush)
+                        }
+                    }
                 } else {
-                    Modifier.border(0.75.dp, Color.White.copy(alpha = 0.18f), shape)
+                    Modifier
                 }
+            )
+            .border(
+                width = if (style.hasSheen) 1.25.dp else 1.dp,
+                color = style.borderColor ?: Color.White.copy(alpha = 0.18f),
+                shape = shape
             ),
         contentAlignment = Alignment.Center
     ) {
-        // Subtle glossy diagonal sheen on high-value milestone tiles
-        if (animEnabled && style.hasSheen) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val diag = size.width * sheenProgress
-                val band = size.width * 0.42f
-                drawRect(
-                    brush = Brush.linearGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            Color.White.copy(alpha = 0.28f),
-                            Color.Transparent
-                        ),
-                        start = Offset(diag - band, diag - band),
-                        end = Offset(diag + band, diag + band)
-                    )
-                )
-            }
-        }
-
         Text(
-            text = FaFormat.fmtTile(value, digitsMode),
+            text = text,
             color = style.textColor,
             fontFamily = VazirmatnFontFamily,
             fontWeight = FontWeight.ExtraBold,

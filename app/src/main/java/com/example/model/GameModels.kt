@@ -1,5 +1,7 @@
 package com.example.model
 
+import androidx.compose.runtime.Immutable
+
 enum class Direction {
     LEFT, RIGHT, UP, DOWN
 }
@@ -26,6 +28,7 @@ enum class DigitsMode {
     FA, EN
 }
 
+@Immutable
 data class Tile(
     val id: Long,
     val r: Int,
@@ -35,6 +38,7 @@ data class Tile(
     val spawned: Boolean = false
 )
 
+@Immutable
 data class GhostTile(
     val id: Long,
     val fromR: Int,
@@ -44,6 +48,7 @@ data class GhostTile(
     val value: Int
 )
 
+@Immutable
 data class MoveResult(
     val tiles: List<Tile>,
     val ghosts: List<GhostTile>,
@@ -51,6 +56,7 @@ data class MoveResult(
     val gained: Int
 )
 
+@Immutable
 data class GameRecord(
     val score: Int,
     val tile: Int,
@@ -59,6 +65,7 @@ data class GameRecord(
     val dateMillis: Long
 )
 
+@Immutable
 data class GameStats(
     val games: Int = 0,
     val wins: Int = 0,
@@ -67,6 +74,7 @@ data class GameStats(
     val seconds: Int = 0
 )
 
+@Immutable
 data class GameSettings(
     val theme: ThemeMode = ThemeMode.LIGHT,
     val palette: ColorPalette = ColorPalette.NUDE_MOCHA,
@@ -76,6 +84,7 @@ data class GameSettings(
     val fullScreenTouch: Boolean = true
 )
 
+@Immutable
 data class GameSnapshot(
     val tiles: List<Tile>,
     val score: Int,
@@ -88,6 +97,7 @@ data class GameSnapshot(
     val runSinceMillis: Long?
 )
 
+@Immutable
 data class GameSession(
     val tiles: List<Tile>,
     val score: Int,
@@ -101,6 +111,7 @@ data class GameSession(
     val runSinceMillis: Long?
 )
 
+@Immutable
 data class PersistedState(
     val best: Int = 0,
     val settings: GameSettings = GameSettings(),

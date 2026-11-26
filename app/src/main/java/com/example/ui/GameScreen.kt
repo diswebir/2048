@@ -4,11 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -58,7 +54,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -140,22 +136,15 @@ fun GameScreen(viewModel: GameViewModel) {
         val swipeThresholdPx = with(density) { 18.dp.toPx() }
         val tapSlopPx = with(density) { 10.dp.toPx() }
 
-        val bgTransition = rememberInfiniteTransition(label = "ambientGlow")
-        val driftPhase by bgTransition.animateFloat(
-            initialValue = -1f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 8500, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "ambientDrift"
-        )
-        val drift = if (state.settings.anim) driftPhase else 0f
         val fullScreenGestureActive = state.settings.fullScreenTouch &&
             !showSplash &&
             state.dialog == GameDialog.None &&
             !state.game.over &&
             !state.game.showWin
+
+        val bgGradient = remember(colors.bgBase, colors.bgMid) {
+            Brush.verticalGradient(listOf(colors.bgBase, colors.bgMid, colors.bgBase))
+        }
 
         Scaffold(
             containerColor = colors.bgBase,
@@ -164,11 +153,35 @@ fun GameScreen(viewModel: GameViewModel) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(colors.bgBase, colors.bgMid, colors.bgBase)
+                    .background(bgGradient)
+                    .drawWithCache {
+                        val pCenter = Offset(size.width * 0.86f, -size.height * 0.05f)
+                        val pRadius = size.maxDimension * 0.56f
+                        val pBrush = Brush.radialGradient(
+                            colors = listOf(colors.bgGlowPrimary, Color.Transparent),
+                            center = pCenter,
+                            radius = pRadius
                         )
-                    )
+                        val cCenter = Offset(size.width * 0.06f, size.height * 0.10f)
+                        val cRadius = size.maxDimension * 0.46f
+                        val cBrush = Brush.radialGradient(
+                            colors = listOf(colors.bgGlowSecondary, Color.Transparent),
+                            center = cCenter,
+                            radius = cRadius
+                        )
+                        val rCenter = Offset(size.width * 0.52f, size.height * 1.04f)
+                        val rRadius = size.maxDimension * 0.50f
+                        val rBrush = Brush.radialGradient(
+                            colors = listOf(colors.bgGlowTertiary, Color.Transparent),
+                            center = rCenter,
+                            radius = rRadius
+                        )
+                        onDrawBehind {
+                            drawCircle(brush = pBrush, radius = pRadius, center = pCenter)
+                            drawCircle(brush = cBrush, radius = cRadius, center = cCenter)
+                            drawCircle(brush = rBrush, radius = rRadius, center = rCenter)
+                        }
+                    }
                     .pointerInput(fullScreenGestureActive) {
                         if (!fullScreenGestureActive) return@pointerInput
                         awaitEachGesture {
@@ -249,40 +262,6 @@ fun GameScreen(viewModel: GameViewModel) {
                         }
                     }
             ) {
-                // Living ambient background glow orbs
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    val pCenter = Offset(size.width * (0.86f + drift * 0.04f), -size.height * (0.05f - drift * 0.02f))
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            colors = listOf(colors.bgGlowPrimary, Color.Transparent),
-                            center = pCenter,
-                            radius = size.maxDimension * 0.56f
-                        ),
-                        radius = size.maxDimension * 0.56f,
-                        center = pCenter
-                    )
-                    val cCenter = Offset(size.width * (0.06f - drift * 0.04f), size.height * (0.10f + drift * 0.03f))
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            colors = listOf(colors.bgGlowSecondary, Color.Transparent),
-                            center = cCenter,
-                            radius = size.maxDimension * 0.46f
-                        ),
-                        radius = size.maxDimension * 0.46f,
-                        center = cCenter
-                    )
-                    val rCenter = Offset(size.width * (0.52f + drift * 0.03f), size.height * 1.04f)
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            colors = listOf(colors.bgGlowTertiary, Color.Transparent),
-                            center = rCenter,
-                            radius = size.maxDimension * 0.50f
-                        ),
-                        radius = size.maxDimension * 0.50f,
-                        center = rCenter
-                    )
-                }
-
                 BoxWithConstraints(
                     modifier = Modifier
                         .fillMaxSize()
@@ -370,7 +349,7 @@ fun GameScreen(viewModel: GameViewModel) {
                                         StatusCard(
                                             maxTile = maxTile,
                                             moves = state.game.moves,
-                                            elapsedSeconds = state.elapsedSeconds,
+                                            elapsedSecondsFlow = viewModel.elapsedSeconds,
                                             stats = state.stats,
                                             digitsMode = state.settings.digits,
                                             animEnabled = state.settings.anim
@@ -426,7 +405,7 @@ fun GameScreen(viewModel: GameViewModel) {
                                     StatusCard(
                                         maxTile = maxTile,
                                         moves = state.game.moves,
-                                        elapsedSeconds = state.elapsedSeconds,
+                                        elapsedSecondsFlow = viewModel.elapsedSeconds,
                                         stats = state.stats,
                                         digitsMode = state.settings.digits,
                                         animEnabled = state.settings.anim
@@ -622,7 +601,6 @@ private fun SplashIntroOverlay(
                         scaleY = logoScale.value
                         alpha = logoAlpha.value
                     }
-                    .shadow(20.dp, shape, ambientColor = colors.brand, spotColor = colors.brand2)
                     .clip(shape)
                     .background(Brush.linearGradient(listOf(colors.brand, colors.brand3, colors.brand2)))
                     .border(1.25.dp, Color.White.copy(alpha = 0.45f), shape)

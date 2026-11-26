@@ -833,7 +833,7 @@ fun ConfettiOverlay(
     val particles = remember(triggerToken, palette) {
         val rnd = Random(triggerToken)
         val shapes = ConfettiShape.entries
-        List(72) { idx ->
+        List(36) { idx ->
             ConfettiParticle(
                 xFraction = rnd.nextFloat(),
                 speed = 0.65f + rnd.nextFloat() * 0.65f,
@@ -848,11 +848,12 @@ fun ConfettiOverlay(
             )
         }
     }
+    val diamondPath = remember { Path() }
 
     LaunchedEffect(triggerToken) {
         active = true
         progress = 0f
-        val durationNanos = 3_200_000_000L
+        val durationNanos = 2_800_000_000L
         val start = withFrameNanos { it }
         while (true) {
             val now = withFrameNanos { it }
@@ -891,14 +892,13 @@ fun ConfettiOverlay(
                     )
                     ConfettiShape.DIAMOND -> {
                         val r = 13f * p.scale
-                        val path = Path().apply {
-                            moveTo(x, y - r)
-                            lineTo(x + r * 0.75f, y)
-                            lineTo(x, y + r)
-                            lineTo(x - r * 0.75f, y)
-                            close()
-                        }
-                        drawPath(path = path, color = c)
+                        diamondPath.rewind()
+                        diamondPath.moveTo(x, y - r)
+                        diamondPath.lineTo(x + r * 0.75f, y)
+                        diamondPath.lineTo(x, y + r)
+                        diamondPath.lineTo(x - r * 0.75f, y)
+                        diamondPath.close()
+                        drawPath(path = diamondPath, color = c)
                     }
                 }
             }

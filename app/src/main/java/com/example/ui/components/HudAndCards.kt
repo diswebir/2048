@@ -3,18 +3,12 @@ package com.example.ui.components
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateIntAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -59,8 +53,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -71,9 +63,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.R
 import com.example.game.GameEngine
 import com.example.model.DigitsMode
@@ -81,9 +73,9 @@ import com.example.model.GameRecord
 import com.example.model.GameStats
 import com.example.ui.theme.LocalAppColors
 import com.example.util.FaFormat
+import kotlinx.coroutines.flow.StateFlow
 import kotlin.math.ln
 import kotlin.math.max
-import kotlin.math.roundToInt
 
 @Composable
 fun HeaderBar(
@@ -182,7 +174,6 @@ fun BrandMark(
     Box(
         modifier = modifier
             .size(size)
-            .shadow(14.dp, shape, ambientColor = colors.brand3, spotColor = colors.brand)
             .clip(shape)
             .background(Brush.linearGradient(listOf(colors.brand, colors.brand3, colors.brand2)))
             .border(1.dp, creamTile.copy(alpha = 0.44f), shape)
@@ -303,15 +294,16 @@ private fun ScoreCard(
         visibleGain?.let { amt ->
             val p = gainProgress.value
             val alpha = if (p < 0.25f) p / 0.25f else (1f - (p - 0.25f) / 0.75f).coerceIn(0f, 1f)
-            val yOffset = (-8 - (p * 32)).roundToInt()
+            val yOffset = -8f - (p * 32f)
             Text(
                 text = "+${FaFormat.fmt(amt, digitsMode)}",
                 color = colors.good,
                 fontWeight = FontWeight.ExtraBold,
                 fontSize = 14.sp,
-                modifier = Modifier
-                    .offset { IntOffset(0, yOffset) }
-                    .alpha(alpha)
+                modifier = Modifier.graphicsLayer {
+                    translationY = yOffset
+                    this.alpha = alpha
+                }
             )
         }
     }
@@ -421,9 +413,9 @@ fun PrimaryGradientButton(
                 scaleY = pressScale
             }
             .height(height)
-            .shadow(10.dp, shape, ambientColor = colors.brand3, spotColor = colors.brand3)
             .clip(shape)
             .background(Brush.linearGradient(listOf(colors.brand, colors.brand3)))
+            .border(0.75.dp, Color.White.copy(alpha = 0.22f), shape)
             .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
             .padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.Center,
@@ -586,7 +578,7 @@ fun GlassCard(
 fun StatusCard(
     maxTile: Int,
     moves: Int,
-    elapsedSeconds: Int,
+    elapsedSecondsFlow: StateFlow<Int>,
     stats: GameStats,
     digitsMode: DigitsMode,
     animEnabled: Boolean,
@@ -596,15 +588,8 @@ fun StatusCard(
     val targetProgress = ((ln(max(2, maxTile).toDouble()) / ln(2.0)) / 11.0).toFloat().coerceIn(0f, 1f)
     val animatedProgress by animateFloatAsState(
         targetValue = targetProgress,
-        animationSpec = if (animEnabled) spring(dampingRatio = 0.85f, stiffness = 300f) else snap(),
+        animationSpec = if (animEnabled) spring(dampingRatio = 0.85f, stiffness = 320f) else snap(),
         label = "milestoneProgress"
-    )
-    val sheenTransition = rememberInfiniteTransition(label = "barSheen")
-    val barSheen by sheenTransition.animateFloat(
-        initialValue = -0.3f,
-        targetValue = 1.3f,
-        animationSpec = infiniteRepeatable(tween(2200, easing = LinearEasing), RepeatMode.Restart),
-        label = "barSheenX"
     )
 
     GlassCard(title = stringResource(R.string.section_status), modifier = modifier) {
@@ -622,9 +607,9 @@ fun StatusCard(
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                StatCell(
-                    label = stringResource(R.string.stat_time),
-                    value = FaFormat.fmtTime(elapsedSeconds, digitsMode),
+                LiveElapsedStatCell(
+                    elapsedSecondsFlow = elapsedSecondsFlow,
+                    digitsMode = digitsMode,
                     modifier = Modifier.weight(1f)
                 )
                 StatCell(
@@ -678,22 +663,23 @@ fun StatusCard(
                     .fillMaxHeight()
                     .clip(CircleShape)
                     .background(Brush.horizontalGradient(listOf(colors.brand2, colors.brand, colors.gold)))
-            ) {
-                if (animEnabled) {
-                    Canvas(modifier = Modifier.fillMaxSize()) {
-                        val cx = size.width * barSheen
-                        drawRect(
-                            brush = Brush.horizontalGradient(
-                                colors = listOf(Color.Transparent, Color.White.copy(alpha = 0.42f), Color.Transparent),
-                                startX = cx - size.height * 4f,
-                                endX = cx + size.height * 4f
-                            )
-                        )
-                    }
-                }
-            }
+            )
         }
     }
+}
+
+@Composable
+private fun LiveElapsedStatCell(
+    elapsedSecondsFlow: StateFlow<Int>,
+    digitsMode: DigitsMode,
+    modifier: Modifier = Modifier
+) {
+    val elapsedSeconds by elapsedSecondsFlow.collectAsStateWithLifecycle()
+    StatCell(
+        label = stringResource(R.string.stat_time),
+        value = FaFormat.fmtTime(elapsedSeconds, digitsMode),
+        modifier = modifier
+    )
 }
 
 @Composable

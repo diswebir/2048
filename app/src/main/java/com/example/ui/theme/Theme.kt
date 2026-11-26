@@ -22,10 +22,13 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.core.view.WindowCompat
 import com.example.R
 import com.example.model.ColorPalette
 import com.example.model.ThemeMode
+import java.util.concurrent.ConcurrentHashMap
 
 val VazirmatnFontFamily = FontFamily(
     Font(R.font.vazirmatn, FontWeight.Normal),
@@ -590,7 +593,14 @@ private fun buildAppColors(palette: ColorPalette, isLight: Boolean): AppColors {
     }
 }
 
-val LocalAppColors = staticCompositionLocalOf { buildAppColors(ColorPalette.NUDE_MOCHA, isLight = true) }
+private val appColorsCache = ConcurrentHashMap<Int, AppColors>(16)
+
+private fun cachedAppColors(palette: ColorPalette, isLight: Boolean): AppColors {
+    val key = (palette.ordinal shl 1) or if (isLight) 1 else 0
+    return appColorsCache.getOrPut(key) { buildAppColors(palette, isLight) }
+}
+
+val LocalAppColors = staticCompositionLocalOf { cachedAppColors(ColorPalette.NUDE_MOCHA, isLight = true) }
 
 @Immutable
 data class TileVisualStyle(
@@ -612,26 +622,32 @@ private data class TilePaletteStep(
     val sheen: Boolean = false
 )
 
+private val tileStyleCache = ConcurrentHashMap<Long, TileVisualStyle>(64)
+
 fun tileStyleFor(
     value: Int,
     isLight: Boolean,
     palette: ColorPalette = ColorPalette.NUDE_MOCHA
 ): TileVisualStyle {
-    val step = when (palette) {
-        ColorPalette.NUDE_MOCHA -> mochaTileStep(value, isLight)
-        ColorPalette.PASTEL_BLUSH -> blushTileStep(value, isLight)
-        ColorPalette.PASTEL_SAGE -> sageTileStep(value, isLight)
-        ColorPalette.PASTEL_LAVENDER -> lavenderTileStep(value, isLight)
-        ColorPalette.PASTEL_PEACH -> peachTileStep(value, isLight)
+    val normalizedValue = if (value > 8192) 16384 else value
+    val key = (palette.ordinal.toLong() shl 20) or ((if (isLight) 1L else 0L) shl 19) or normalizedValue.toLong()
+    return tileStyleCache.getOrPut(key) {
+        val step = when (palette) {
+            ColorPalette.NUDE_MOCHA -> mochaTileStep(normalizedValue, isLight)
+            ColorPalette.PASTEL_BLUSH -> blushTileStep(normalizedValue, isLight)
+            ColorPalette.PASTEL_SAGE -> sageTileStep(normalizedValue, isLight)
+            ColorPalette.PASTEL_LAVENDER -> lavenderTileStep(normalizedValue, isLight)
+            ColorPalette.PASTEL_PEACH -> peachTileStep(normalizedValue, isLight)
+        }
+        TileVisualStyle(
+            background = Brush.linearGradient(listOf(step.start, step.end)),
+            textColor = step.text,
+            glowColor = step.glow,
+            borderColor = step.border,
+            particleColor = step.particle,
+            hasSheen = step.sheen
+        )
     }
-    return TileVisualStyle(
-        background = Brush.linearGradient(listOf(step.start, step.end)),
-        textColor = step.text,
-        glowColor = step.glow,
-        borderColor = step.border,
-        particleColor = step.particle,
-        hasSheen = step.sheen
-    )
 }
 
 private fun mochaTileStep(value: Int, isLight: Boolean): TilePaletteStep = when (value) {
@@ -841,39 +857,41 @@ fun Puzzle2048Theme(
 
     val view = LocalView.current
     if (!view.isInEditMode) {
-        SideEffect {
-            val window = (view.context as? Activity)?.window ?: return@SideEffect
+        LaunchedEffect(useLight) {
+            val window = (view.context as? Activity)?.window ?: return@LaunchedEffect
             val insetsController = WindowCompat.getInsetsController(window, view)
             insetsController.isAppearanceLightStatusBars = useLight
             insetsController.isAppearanceLightNavigationBars = useLight
         }
     }
 
-    val appColors = buildAppColors(palette = palette, isLight = useLight)
-    val m3Scheme = if (useLight) {
-        lightColorScheme(
-            primary = appColors.brand,
-            onPrimary = Color(0xFFFFFBF6),
-            secondary = appColors.brand2,
-            background = appColors.bgBase,
-            surface = appColors.modalBgStart,
-            onBackground = appColors.text,
-            onSurface = appColors.text,
-            outline = appColors.lineStrong,
-            error = appColors.danger
-        )
-    } else {
-        darkColorScheme(
-            primary = appColors.brand,
-            onPrimary = Color(0xFFFFFBF6),
-            secondary = appColors.brand2,
-            background = appColors.bgBase,
-            surface = appColors.modalBgStart,
-            onBackground = appColors.text,
-            onSurface = appColors.text,
-            outline = appColors.lineStrong,
-            error = appColors.danger
-        )
+    val appColors = cachedAppColors(palette = palette, isLight = useLight)
+    val m3Scheme = remember(appColors) {
+        if (useLight) {
+            lightColorScheme(
+                primary = appColors.brand,
+                onPrimary = Color(0xFFFFFBF6),
+                secondary = appColors.brand2,
+                background = appColors.bgBase,
+                surface = appColors.modalBgStart,
+                onBackground = appColors.text,
+                onSurface = appColors.text,
+                outline = appColors.lineStrong,
+                error = appColors.danger
+            )
+        } else {
+            darkColorScheme(
+                primary = appColors.brand,
+                onPrimary = Color(0xFFFFFBF6),
+                secondary = appColors.brand2,
+                background = appColors.bgBase,
+                surface = appColors.modalBgStart,
+                onBackground = appColors.text,
+                onSurface = appColors.text,
+                outline = appColors.lineStrong,
+                error = appColors.danger
+            )
+        }
     }
 
     CompositionLocalProvider(LocalAppColors provides appColors) {

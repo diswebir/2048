@@ -1,6 +1,7 @@
 package com.example.ui
 
 import android.app.Application
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.R
@@ -38,11 +39,13 @@ sealed interface GameDialog {
     data object ConfirmResetAll : GameDialog
 }
 
+@Immutable
 data class ToastMessage(
     val id: Long,
     val text: String
 )
 
+@Immutable
 data class MergeBurst(
     val id: Long,
     val r: Int,
@@ -50,6 +53,7 @@ data class MergeBurst(
     val value: Int
 )
 
+@Immutable
 data class GameUiState(
     val isReady: Boolean = false,
     val game: GameSession = GameSession(
@@ -69,7 +73,6 @@ data class GameUiState(
     val stats: GameStats = GameStats(),
     val records: List<GameRecord> = emptyList(),
     val undoCount: Int = 0,
-    val elapsedSeconds: Int = 0,
     val ghosts: List<GhostTile> = emptyList(),
     val ghostToken: Long = 0L,
     val mergeBursts: List<MergeBurst> = emptyList(),
@@ -99,13 +102,19 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val _uiState = MutableStateFlow(GameUiState())
     val uiState: StateFlow<GameUiState> = _uiState.asStateFlow()
 
+    // Dedicated lightweight flow for timer ticks so 1s updates ONLY recompose the single timer text cell
+    private val _elapsedSeconds = MutableStateFlow(0)
+    val elapsedSeconds: StateFlow<Int> = _elapsedSeconds.asStateFlow()
+
     private val undoStack = ArrayDeque<GameSnapshot>(GameEngine.HISTORY_LIMIT + 1)
     private val queuedDirs = ArrayDeque<Direction>(3)
     private var paintBusy = false
     private var moveToken = 0L
     private var lastRecordToastMillis = 0L
-    private var lastSavedSecond = -1
+    private var isInForeground = true
 
+    private var tickerJob: Job? = null
+    private var persistJob: Job? = null
     private var lockJob: Job? = null
     private var spawnJob: Job? = null
     private var toastJob: Job? = null
@@ -125,6 +134,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 bestTile = maxOf(loaded.stats.bestTile, maxTile)
             )
             sound.enabled = loaded.settings.sound
+            val initialElapsed = computeElapsed(session)
+            _elapsedSeconds.value = initialElapsed
             _uiState.update {
                 it.copy(
                     isReady = true,
@@ -133,62 +144,83 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     settings = loaded.settings,
                     stats = updatedStats,
                     records = sortedRecords(loaded.records),
-                    undoCount = undoStack.size,
-                    elapsedSeconds = computeElapsed(session)
+                    undoCount = undoStack.size
                 )
             }
-            persistNow()
-            startTicker()
+            syncTickerState()
         }
     }
 
     private fun nextTileId(): Long = idCounter.getAndIncrement()
 
-    private fun startTicker() {
-        viewModelScope.launch {
+    // Ticker runs ONLY in foreground while a game has active moves; 0 wakeups at idle or background
+    private fun syncTickerState() {
+        val state = _uiState.value
+        val session = state.game
+        val shouldRun = isInForeground &&
+            state.isReady &&
+            !session.over &&
+            !session.showWin &&
+            session.runSinceMillis != null
+
+        if (!shouldRun) {
+            tickerJob?.cancel()
+            tickerJob = null
+            return
+        }
+        if (tickerJob?.isActive == true) return
+        tickerJob = viewModelScope.launch {
             while (true) {
                 delay(1000L)
-                val state = _uiState.value
-                val session = state.game
-                if (!session.over && !session.showWin) {
-                    val sec = computeElapsed(session)
-                    if (sec != state.elapsedSeconds) {
-                        _uiState.update { it.copy(elapsedSeconds = sec) }
-                    }
-                    if (sec != lastSavedSecond && sec % 5 == 0 && session.moves > 0) {
-                        lastSavedSecond = sec
-                        persistNow()
-                    }
+                val s = _uiState.value.game
+                if (!isInForeground || s.over || s.showWin || s.runSinceMillis == null) {
+                    break
+                }
+                val sec = computeElapsed(s)
+                if (sec != _elapsedSeconds.value) {
+                    _elapsedSeconds.value = sec
                 }
             }
+            tickerJob = null
         }
     }
 
     fun onAppPaused() {
+        isInForeground = false
+        tickerJob?.cancel()
+        tickerJob = null
         val state = _uiState.value
         if (!state.isReady) return
         val session = state.game
         if (session.runSinceMillis != null) {
             val elapsed = computeElapsed(session)
+            _elapsedSeconds.value = elapsed
             val paused = session.copy(timeBank = elapsed, runSinceMillis = null)
-            _uiState.update { it.copy(game = paused, elapsedSeconds = elapsed) }
+            _uiState.update { it.copy(game = paused) }
         }
-        persistNow()
+        persistImmediate()
     }
 
     fun onAppResumed() {
+        isInForeground = true
         val state = _uiState.value
         val session = state.game
-        if (!state.isReady || session.over || session.showWin || session.runSinceMillis != null || session.moves == 0) {
+        if (!state.isReady || session.over || session.showWin) {
+            syncTickerState()
             return
         }
-        val resumed = session.copy(runSinceMillis = System.currentTimeMillis())
-        _uiState.update { it.copy(game = resumed) }
+        if (session.runSinceMillis == null && session.moves > 0) {
+            val resumed = session.copy(runSinceMillis = System.currentTimeMillis())
+            _uiState.update { it.copy(game = resumed) }
+        }
+        syncTickerState()
     }
 
     override fun onCleared() {
         super.onCleared()
-        persistNow()
+        tickerJob?.cancel()
+        persistImmediate()
+        sound.release()
     }
 
     fun move(dir: Direction) {
@@ -219,13 +251,18 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val newScore = session.score + res.gained
         val newBest = maxOf(prevBest, newScore)
         val newStats = state.stats.copy(moves = state.stats.moves + 1)
-        val bursts = res.tiles.filter { it.merged }.map {
-            MergeBurst(id = burstCounter.getAndIncrement(), r = it.r, c = it.c, value = it.value)
+        val bursts = if (state.settings.anim) {
+            res.tiles.filter { it.merged }.map {
+                MergeBurst(id = burstCounter.getAndIncrement(), r = it.r, c = it.c, value = it.value)
+            }
+        } else {
+            emptyList()
         }
-        val nextCombo = if (bursts.isNotEmpty()) state.comboCount + 1 else 0
+        val mergedOccurred = res.gained > 0
+        val nextCombo = if (mergedOccurred) state.comboCount + 1 else 0
 
-        if (res.gained > 0) {
-            val mergedMax = bursts.maxOfOrNull { it.value } ?: 2
+        if (mergedOccurred) {
+            val mergedMax = res.tiles.maxOfOrNull { if (it.merged) it.value else 0 }?.coerceAtLeast(2) ?: 2
             sound.merge(mergedMax)
         } else {
             sound.move()
@@ -244,8 +281,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 best = newBest,
                 stats = newStats,
                 undoCount = undoStack.size,
-                ghosts = res.ghosts,
-                ghostToken = if (res.ghosts.isNotEmpty()) cur.ghostToken + 1 else cur.ghostToken,
+                ghosts = if (cur.settings.anim) res.ghosts else emptyList(),
+                ghostToken = if (cur.settings.anim && res.ghosts.isNotEmpty()) cur.ghostToken + 1 else cur.ghostToken,
                 mergeBursts = bursts,
                 mergeBurstToken = if (bursts.isNotEmpty()) cur.mergeBurstToken + 1 else cur.mergeBurstToken,
                 swipeGlowDir = dir,
@@ -257,9 +294,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 bestPulseToken = if (newBest > prevBest && prevBest > 0) cur.bestPulseToken + 1 else cur.bestPulseToken
             )
         }
-        scheduleGhostClear()
+        if (state.settings.anim && res.ghosts.isNotEmpty()) scheduleGhostClear()
         if (bursts.isNotEmpty()) scheduleBurstClear()
-        persistNow()
+        syncTickerState()
 
         if (newBest > prevBest && prevBest > 0 && now - lastRecordToastMillis > 4000L) {
             lastRecordToastMillis = now
@@ -272,7 +309,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val token = ++moveToken
         spawnJob?.cancel()
         spawnJob = viewModelScope.launch {
-            delay(50L)
+            delay(45L)
             if (token != moveToken) return@launch
             val curState = _uiState.value
             val curSession = curState.game
@@ -282,7 +319,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val afterSpawn = curSession.copy(tiles = withSpawn)
             afterMoveCheck(afterSpawn)
             beginInputLock()
-            persistNow()
+            persistDebounced()
         }
     }
 
@@ -309,13 +346,18 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val newScore = session.score + res.gained
         val newBest = maxOf(prevBest, newScore)
         val newStats = state.stats.copy(moves = state.stats.moves + 1)
-        val bursts = res.tiles.filter { it.merged }.map {
-            MergeBurst(id = burstCounter.getAndIncrement(), r = it.r, c = it.c, value = it.value)
+        val bursts = if (state.settings.anim) {
+            res.tiles.filter { it.merged }.map {
+                MergeBurst(id = burstCounter.getAndIncrement(), r = it.r, c = it.c, value = it.value)
+            }
+        } else {
+            emptyList()
         }
-        val nextCombo = if (bursts.isNotEmpty()) state.comboCount + 1 else 0
+        val mergedOccurred = res.gained > 0
+        val nextCombo = if (mergedOccurred) state.comboCount + 1 else 0
 
-        if (res.gained > 0) {
-            val mergedMax = bursts.maxOfOrNull { it.value } ?: 2
+        if (mergedOccurred) {
+            val mergedMax = res.tiles.maxOfOrNull { if (it.merged) it.value else 0 }?.coerceAtLeast(2) ?: 2
             sound.merge(mergedMax)
         } else {
             sound.move()
@@ -334,8 +376,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 best = newBest,
                 stats = newStats,
                 undoCount = undoStack.size,
-                ghosts = res.ghosts,
-                ghostToken = if (res.ghosts.isNotEmpty()) cur.ghostToken + 1 else cur.ghostToken,
+                ghosts = if (cur.settings.anim) res.ghosts else emptyList(),
+                ghostToken = if (cur.settings.anim && res.ghosts.isNotEmpty()) cur.ghostToken + 1 else cur.ghostToken,
                 mergeBursts = bursts,
                 mergeBurstToken = if (bursts.isNotEmpty()) cur.mergeBurstToken + 1 else cur.mergeBurstToken,
                 swipeGlowDir = dir,
@@ -347,18 +389,19 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 bestPulseToken = if (newBest > prevBest && prevBest > 0) cur.bestPulseToken + 1 else cur.bestPulseToken
             )
         }
-        scheduleGhostClear()
+        if (state.settings.anim && res.ghosts.isNotEmpty()) scheduleGhostClear()
         if (bursts.isNotEmpty()) scheduleBurstClear()
 
         afterMoveCheck(updatedSession)
+        syncTickerState()
         beginInputLock()
-        persistNow()
+        persistDebounced()
     }
 
     private fun scheduleGhostClear() {
         ghostClearJob?.cancel()
         ghostClearJob = viewModelScope.launch {
-            delay(230L)
+            delay(180L)
             _uiState.update { if (it.ghosts.isEmpty()) it else it.copy(ghosts = emptyList()) }
         }
     }
@@ -366,7 +409,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private fun scheduleBurstClear() {
         burstClearJob?.cancel()
         burstClearJob = viewModelScope.launch {
-            delay(540L)
+            delay(340L)
             _uiState.update { if (it.mergeBursts.isEmpty()) it else it.copy(mergeBursts = emptyList()) }
         }
     }
@@ -375,7 +418,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         paintBusy = true
         lockJob?.cancel()
         lockJob = viewModelScope.launch {
-            delay(65L)
+            delay(60L)
             paintBusy = false
             val next = queuedDirs.removeFirstOrNull()
             if (next != null) {
@@ -390,10 +433,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         var stats = cur.stats.copy(bestTile = maxOf(cur.stats.bestTile, maxTile))
         var session = sessionInput
         var confettiBump = 0L
+        var needsImmediateSave = false
 
         if (maxTile >= GameEngine.TARGET && !session.won) {
             stats = stats.copy(wins = stats.wins + 1)
             session = session.copy(won = true)
+            needsImmediateSave = true
             if (!session.keepPlaying) {
                 val elapsed = computeElapsed(session)
                 session = session.copy(
@@ -412,6 +457,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
         if (!GameEngine.hasMoves(session.tiles) && !session.over) {
             val seconds = computeElapsed(session)
+            needsImmediateSave = true
             session = session.copy(
                 over = true,
                 timeBank = seconds,
@@ -443,15 +489,19 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
+        _elapsedSeconds.value = computeElapsed(session)
         _uiState.update { state ->
             state.copy(
                 game = session,
                 best = best,
                 stats = stats,
                 records = records,
-                elapsedSeconds = computeElapsed(session),
                 confettiToken = state.confettiToken + confettiBump
             )
+        }
+        syncTickerState()
+        if (needsImmediateSave) {
+            persistImmediate()
         }
     }
 
@@ -466,7 +516,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             runSinceMillis = if (!s.over && s.runSinceMillis == null) System.currentTimeMillis() else s.runSinceMillis
         )
         _uiState.update { it.copy(game = resumed) }
-        persistNow()
+        syncTickerState()
+        persistImmediate()
         showToast(appContext.getString(R.string.toast_continue))
     }
 
@@ -494,18 +545,19 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         queuedDirs.clear()
         undoStack.clear()
         val fresh = GameEngine.freshGame(::nextTileId)
+        _elapsedSeconds.value = 0
         _uiState.update {
             it.copy(
                 game = fresh,
                 undoCount = 0,
-                elapsedSeconds = 0,
                 ghosts = emptyList(),
                 mergeBursts = emptyList(),
                 comboCount = 0,
                 dialog = GameDialog.None
             )
         }
-        persistNow()
+        syncTickerState()
+        persistImmediate()
         sound.click()
         showToast(appContext.getString(R.string.toast_new_game))
     }
@@ -529,18 +581,19 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
         val restored = GameEngine.fromSnapshot(snap, System.currentTimeMillis())
         val newStats = state.stats.copy(moves = (state.stats.moves - 1).coerceAtLeast(0))
+        _elapsedSeconds.value = computeElapsed(restored)
         _uiState.update {
             it.copy(
                 game = restored,
                 stats = newStats,
                 undoCount = undoStack.size,
-                elapsedSeconds = computeElapsed(restored),
                 ghosts = emptyList(),
                 mergeBursts = emptyList(),
                 comboCount = 0
             )
         }
-        persistNow()
+        syncTickerState()
+        persistDebounced()
         sound.click()
         showToast(appContext.getString(R.string.toast_undo))
     }
@@ -550,7 +603,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val next = !cur.sound
         sound.enabled = next
         _uiState.update { it.copy(settings = cur.copy(sound = next)) }
-        persistNow()
+        persistImmediate()
         if (next) {
             sound.click()
             showToast(appContext.getString(R.string.toast_sound_on))
@@ -564,7 +617,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (cur.sound == enabled) return
         sound.enabled = enabled
         _uiState.update { it.copy(settings = cur.copy(sound = enabled)) }
-        persistNow()
+        persistImmediate()
         if (enabled) sound.click()
     }
 
@@ -573,7 +626,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (cur.theme == mode) return
         sound.click()
         _uiState.update { it.copy(settings = cur.copy(theme = mode)) }
-        persistNow()
+        persistImmediate()
     }
 
     fun setColorPalette(palette: ColorPalette) {
@@ -581,7 +634,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (cur.palette == palette) return
         sound.click()
         _uiState.update { it.copy(settings = cur.copy(palette = palette)) }
-        persistNow()
+        persistImmediate()
     }
 
     fun setFullScreenTouch(enabled: Boolean) {
@@ -589,7 +642,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (cur.fullScreenTouch == enabled) return
         sound.click()
         _uiState.update { it.copy(settings = cur.copy(fullScreenTouch = enabled)) }
-        persistNow()
+        persistImmediate()
     }
 
     fun setDigitsMode(usePersian: Boolean) {
@@ -598,7 +651,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (cur.digits == mode) return
         sound.click()
         _uiState.update { it.copy(settings = cur.copy(digits = mode)) }
-        persistNow()
+        persistImmediate()
     }
 
     fun setAnimEnabled(enabled: Boolean) {
@@ -606,7 +659,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (cur.anim == enabled) return
         sound.click()
         _uiState.update { it.copy(settings = cur.copy(anim = enabled)) }
-        persistNow()
+        persistImmediate()
     }
 
     fun openSettings() {
@@ -638,7 +691,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 dialog = GameDialog.None
             )
         }
-        persistNow()
+        persistImmediate()
         showToast(appContext.getString(R.string.toast_records_cleared))
     }
 
@@ -653,12 +706,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         lockJob?.cancel()
         ghostClearJob?.cancel()
         burstClearJob?.cancel()
+        persistJob?.cancel()
         paintBusy = false
         queuedDirs.clear()
         undoStack.clear()
         val freshSettings = GameSettings()
         sound.enabled = freshSettings.sound
         val fresh = GameEngine.freshGame(::nextTileId)
+        _elapsedSeconds.value = 0
         _uiState.update {
             it.copy(
                 game = fresh,
@@ -667,16 +722,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 stats = GameStats(bestTile = GameEngine.maxTileValue(fresh.tiles)),
                 records = emptyList(),
                 undoCount = 0,
-                elapsedSeconds = 0,
                 ghosts = emptyList(),
                 mergeBursts = emptyList(),
                 comboCount = 0,
                 dialog = GameDialog.None
             )
         }
+        syncTickerState()
         viewModelScope.launch {
             repository.clearAll()
-            persistNow()
+            persistImmediate()
         }
         sound.click()
         showToast(appContext.getString(R.string.toast_data_cleared))
@@ -724,7 +779,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         return list.sortedWith(compareByDescending<GameRecord> { it.score }.thenBy { it.dateMillis })
     }
 
-    private fun persistNow() {
+    private fun persistDebounced() {
+        persistJob?.cancel()
+        persistJob = viewModelScope.launch {
+            delay(550L)
+            persistImmediate()
+        }
+    }
+
+    private fun persistImmediate() {
+        persistJob?.cancel()
         val state = _uiState.value
         if (!state.isReady) return
         val persisted = PersistedState(

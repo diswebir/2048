@@ -61,10 +61,16 @@ class StateRepository(private val context: Context) {
         PersistedState()
     }
 
+    @Volatile
+    private var pendingSave: Pair<PersistedState, Int>? = null
+
     fun saveAsync(state: PersistedState, elapsedSeconds: Int) {
-        val json = encodeState(state, elapsedSeconds)
+        pendingSave = state to elapsedSeconds
         ioScope.launch {
             writeMutex.withLock {
+                val payload = pendingSave ?: return@withLock
+                pendingSave = null
+                val json = encodeState(payload.first, payload.second)
                 withContext(NonCancellable) {
                     writeInternal(json)
                 }
@@ -73,6 +79,7 @@ class StateRepository(private val context: Context) {
     }
 
     suspend fun clearAll() = withContext(NonCancellable + Dispatchers.IO) {
+        pendingSave = null
         writeMutex.withLock {
             try {
                 context.dataStore.edit { prefs ->
