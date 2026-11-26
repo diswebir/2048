@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item
-        android:width="66dp"
-        android:height="66dp"
-        android:drawable="@drawable/launcher_2048_icon_1795608117455"
+        android:width="82dp"
+        android:height="82dp"
+        android:drawable="@drawable/nude_cream_brown_2048_icon_1795611831878"
         android:gravity="center" />
 </layer-list>

@@ -178,7 +178,7 @@ fun GameScreen(viewModel: GameViewModel) {
                     val pCenter = Offset(size.width * (0.86f + drift * 0.04f), -size.height * (0.05f - drift * 0.02f))
                     drawCircle(
                         brush = Brush.radialGradient(
-                            colors = listOf(colors.bgGlowPurple, Color.Transparent),
+                            colors = listOf(colors.bgGlowPrimary, Color.Transparent),
                             center = pCenter,
                             radius = size.maxDimension * 0.56f
                         ),
@@ -188,7 +188,7 @@ fun GameScreen(viewModel: GameViewModel) {
                     val cCenter = Offset(size.width * (0.06f - drift * 0.04f), size.height * (0.10f + drift * 0.03f))
                     drawCircle(
                         brush = Brush.radialGradient(
-                            colors = listOf(colors.bgGlowCyan, Color.Transparent),
+                            colors = listOf(colors.bgGlowSecondary, Color.Transparent),
                             center = cCenter,
                             radius = size.maxDimension * 0.46f
                         ),
@@ -198,7 +198,7 @@ fun GameScreen(viewModel: GameViewModel) {
                     val rCenter = Offset(size.width * (0.52f + drift * 0.03f), size.height * 1.04f)
                     drawCircle(
                         brush = Brush.radialGradient(
-                            colors = listOf(colors.bgGlowCoral, Color.Transparent),
+                            colors = listOf(colors.bgGlowTertiary, Color.Transparent),
                             center = rCenter,
                             radius = size.maxDimension * 0.50f
                         ),
@@ -569,7 +569,8 @@ private fun SplashIntroOverlay(
                     .border(1.25.dp, Color.White.copy(alpha = 0.45f), shape)
                     .padding(11.dp)
             ) {
-                val alphas = listOf(0.95f, 0.56f, 0.74f, 0.36f)
+                val alphas = listOf(0.95f, 0.58f, 0.76f, 0.38f)
+                val creamTile = Color(0xFFFFFAF2)
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxSize()) {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.weight(1f)) {
                         for (idx in 0..1) {
@@ -582,7 +583,7 @@ private fun SplashIntroOverlay(
                                         scaleY = tileScales[idx].value
                                     }
                                     .clip(RoundedCornerShape(10.dp))
-                                    .background(Color.White.copy(alpha = alphas[idx]))
+                                    .background(creamTile.copy(alpha = alphas[idx]))
                             )
                         }
                     }
@@ -597,7 +598,7 @@ private fun SplashIntroOverlay(
                                         scaleY = tileScales[idx].value
                                     }
                                     .clip(RoundedCornerShape(10.dp))
-                                    .background(Color.White.copy(alpha = alphas[idx]))
+                                    .background(creamTile.copy(alpha = alphas[idx]))
                             )
                         }
                     }

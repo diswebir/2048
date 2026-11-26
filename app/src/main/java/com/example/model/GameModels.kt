@@ -54,7 +54,7 @@ data class GameStats(
 )
 
 data class GameSettings(
-    val theme: ThemeMode = ThemeMode.DARK,
+    val theme: ThemeMode = ThemeMode.LIGHT,
     val sound: Boolean = true,
     val digits: DigitsMode = DigitsMode.FA,
     val anim: Boolean = true

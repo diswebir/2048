@@ -267,8 +267,8 @@ private fun ThemeSegmentedControl(
 ) {
     val colors = LocalAppColors.current
     val options = listOf(
-        ThemeMode.DARK to stringResource(R.string.theme_dark),
         ThemeMode.LIGHT to stringResource(R.string.theme_light),
+        ThemeMode.DARK to stringResource(R.string.theme_dark),
         ThemeMode.AUTO to stringResource(R.string.theme_auto)
     )
     Row(
@@ -597,13 +597,13 @@ fun ConfettiOverlay(
 
     val palette = remember {
         listOf(
-            Color(0xFFFFD166),
-            Color(0xFF7C5CFF),
-            Color(0xFF22D3EE),
-            Color(0xFFFF6B6B),
-            Color(0xFF4ADE80),
-            Color(0xFFF472B6),
-            Color(0xFFFFAB3D)
+            Color(0xFFF6E7D4),
+            Color(0xFFE7C49A),
+            Color(0xFFCF9A6E),
+            Color(0xFFB57E56),
+            Color(0xFF8E5D3E),
+            Color(0xFFDDB792),
+            Color(0xFF6B432C)
         )
     }
 

@@ -178,23 +178,24 @@ fun BrandMark(
     val innerPad = (size.value * 0.11f).dp
     val cellGap = (size.value * 0.06f).dp
     val cellRadius = (size.value * 0.09f).dp
+    val creamTile = Color(0xFFFFFAF2)
     Box(
         modifier = modifier
             .size(size)
-            .shadow(14.dp, shape, ambientColor = colors.brand, spotColor = colors.brand2)
+            .shadow(14.dp, shape, ambientColor = colors.brand3, spotColor = colors.brand)
             .clip(shape)
             .background(Brush.linearGradient(listOf(colors.brand, colors.brand3, colors.brand2)))
-            .border(1.dp, Color.White.copy(alpha = 0.44f), shape)
+            .border(1.dp, creamTile.copy(alpha = 0.44f), shape)
             .padding(innerPad)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(cellGap), modifier = Modifier.fillMaxWidth()) {
             Row(horizontalArrangement = Arrangement.spacedBy(cellGap), modifier = Modifier.weight(1f)) {
-                Box(modifier = Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(cellRadius)).background(Color.White.copy(alpha = 0.94f)))
-                Box(modifier = Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(cellRadius)).background(Color.White.copy(alpha = 0.54f)))
+                Box(modifier = Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(cellRadius)).background(creamTile.copy(alpha = 0.94f)))
+                Box(modifier = Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(cellRadius)).background(creamTile.copy(alpha = 0.56f)))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(cellGap), modifier = Modifier.weight(1f)) {
-                Box(modifier = Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(cellRadius)).background(Color.White.copy(alpha = 0.74f)))
-                Box(modifier = Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(cellRadius)).background(Color.White.copy(alpha = 0.36f)))
+                Box(modifier = Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(cellRadius)).background(creamTile.copy(alpha = 0.76f)))
+                Box(modifier = Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(cellRadius)).background(creamTile.copy(alpha = 0.38f)))
             }
         }
     }

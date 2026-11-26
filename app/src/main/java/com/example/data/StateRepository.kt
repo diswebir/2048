@@ -197,10 +197,10 @@ class StateRepository(private val context: Context) {
 
         val settingsObj = root.optJSONObject("settings")
         val settings = if (settingsObj != null) {
-            val theme = when (settingsObj.optString("theme", "dark")) {
-                "light" -> ThemeMode.LIGHT
+            val theme = when (settingsObj.optString("theme", "light")) {
+                "dark" -> ThemeMode.DARK
                 "auto" -> ThemeMode.AUTO
-                else -> ThemeMode.DARK
+                else -> ThemeMode.LIGHT
             }
             val digits = if (settingsObj.optString("digits", "fa") == "en") DigitsMode.EN else DigitsMode.FA
             GameSettings(
